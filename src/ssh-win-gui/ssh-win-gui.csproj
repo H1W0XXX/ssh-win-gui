@@ -3,6 +3,8 @@
   <ItemGroup>
     <ProjectReference Include="..\RsyncShell.Core\RsyncShell.Core.csproj" />
     <PackageReference Include="CI.Microsoft.Terminal.Wpf" Version="1.25.260303002" />
+    <Resource Include="Assets\ssh-win-gui.ico" />
+    <Resource Include="Assets\ssh-win-gui.png" />
     <Content Include="..\..\tools\rsync\rsyncworker.exe"
              Link="tools\rsync\rsyncworker.exe"
              Condition="Exists('..\..\tools\rsync\rsyncworker.exe')">
@@ -15,6 +17,7 @@
     <AssemblyName>ssh-win-gui</AssemblyName>
     <RootNamespace>RsyncShell.App</RootNamespace>
     <Product>ssh-win-gui</Product>
+    <ApplicationIcon>Assets\ssh-win-gui.ico</ApplicationIcon>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
     <Nullable>enable</Nullable>

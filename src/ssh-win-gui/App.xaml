@@ -12,6 +12,7 @@
             <Setter Property="FontFamily" Value="Segoe UI" />
             <Setter Property="FontSize" Value="13" />
             <Setter Property="Background" Value="{StaticResource ChromeBrush}" />
+            <Setter Property="Icon" Value="/ssh-win-gui;component/Assets/ssh-win-gui.ico" />
         </Style>
 
         <Style x:Key="ToolbarButton" TargetType="Button">
