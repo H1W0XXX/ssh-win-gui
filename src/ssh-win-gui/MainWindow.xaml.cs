@@ -1580,6 +1580,130 @@ public partial class MainWindow : Window
         UpdateMousePasteMenu();
     }
 
+    private async void ExportSettingsMenuItem_OnClick(object sender, RoutedEventArgs e)
+    {
+        var dialog = new OpenFolderDialog
+        {
+            Title = LocalizationService.Get("SelectSettingsExportFolder"),
+        };
+        if (dialog.ShowDialog(this) != true)
+        {
+            return;
+        }
+
+        var exportPath = SettingsTransferService.GetExportPath(dialog.FolderName);
+        if (File.Exists(exportPath) && MessageBox.Show(
+                this,
+                LocalizationService.Format("OverwriteSettingsExport", exportPath),
+                LocalizationService.Get("ExportSettings"),
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Question,
+                MessageBoxResult.No) != MessageBoxResult.Yes)
+        {
+            return;
+        }
+
+        try
+        {
+            await SettingsTransferService.ExportAsync(dialog.FolderName, _profiles);
+            MessageBox.Show(
+                this,
+                LocalizationService.Format("SettingsExported", exportPath),
+                LocalizationService.Get("ExportSettings"),
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                this,
+                LocalizationService.Format("SettingsTransferFailed", ex.Message),
+                LocalizationService.Get("ExportSettings"),
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+        }
+    }
+
+    private async void ImportSettingsMenuItem_OnClick(object sender, RoutedEventArgs e)
+    {
+        var dialog = new OpenFolderDialog
+        {
+            Title = LocalizationService.Get("SelectSettingsImportFolder"),
+        };
+        if (dialog.ShowDialog(this) != true)
+        {
+            return;
+        }
+
+        var importPath = SettingsTransferService.GetExportPath(dialog.FolderName);
+        if (!File.Exists(importPath))
+        {
+            MessageBox.Show(
+                this,
+                LocalizationService.Format("SettingsImportFileMissing", importPath),
+                LocalizationService.Get("ImportSettings"),
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+            return;
+        }
+
+        try
+        {
+            var package = await SettingsTransferService.ImportAsync(dialog.FolderName);
+            if (MessageBox.Show(
+                    this,
+                    LocalizationService.Format("ConfirmSettingsImport", package.Sessions.Length),
+                    LocalizationService.Get("ImportSettings"),
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Warning,
+                    MessageBoxResult.No) != MessageBoxResult.Yes)
+            {
+                return;
+            }
+
+            var previousProfiles = _profiles.ToArray();
+            _profiles.Clear();
+            _profiles.AddRange(package.Sessions);
+            if (!await SaveSessionsAsync())
+            {
+                _profiles.Clear();
+                _profiles.AddRange(previousProfiles);
+                return;
+            }
+
+            LocalizationService.SetMousePasteButton(
+                LocalizationService.ParseMousePasteButton(package.MousePasteButton));
+            LocalizationService.SetKeywordHighlightingEnabled(package.KeywordHighlightingEnabled);
+            LocalizationService.SetKeywordHighlightingRules(TerminalKeywordRules.CreateNormalized(
+                package.KeywordGreen,
+                package.KeywordRed,
+                package.KeywordYellow));
+            LocalizationService.SetLanguage(
+                LocalizationService.SupportedLanguages.Contains(package.Language, StringComparer.Ordinal)
+                    ? package.Language
+                    : "en");
+            RebuildSessionTree();
+            UpdateLanguageMenu();
+            UpdateMousePasteMenu();
+            UpdateKeywordHighlightingMenu();
+            MessageBox.Show(
+                this,
+                LocalizationService.Format("SettingsImported", package.Sessions.Length),
+                LocalizationService.Get("ImportSettings"),
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                this,
+                LocalizationService.Format("SettingsTransferFailed", ex.Message),
+                LocalizationService.Get("ImportSettings"),
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+        }
+    }
+
     private void KeywordHighlightingEnabledMenuItem_OnClick(object sender, RoutedEventArgs e)
     {
         LocalizationService.SetKeywordHighlightingEnabled(KeywordHighlightingEnabledMenuItem.IsChecked);

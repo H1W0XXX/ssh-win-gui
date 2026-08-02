@@ -37,6 +37,16 @@
     <sys:String x:Key="MenuLanguage">Language</sys:String>
     <sys:String x:Key="LanguageEnglish">English</sys:String>
     <sys:String x:Key="LanguageChinese">Chinese (Simplified)</sys:String>
+    <sys:String x:Key="ExportSettings">Export settings...</sys:String>
+    <sys:String x:Key="ImportSettings">Import settings...</sys:String>
+    <sys:String x:Key="SelectSettingsExportFolder">Select the settings export folder</sys:String>
+    <sys:String x:Key="SelectSettingsImportFolder">Select the folder containing ssh-win-gui-settings.json</sys:String>
+    <sys:String x:Key="OverwriteSettingsExport">The following export file already exists. Overwrite it?&#x0a;&#x0a;{0}</sys:String>
+    <sys:String x:Key="SettingsExported">Settings were exported to:&#x0a;&#x0a;{0}&#x0a;&#x0a;The export contains no passwords, private-key files, or private-key paths.</sys:String>
+    <sys:String x:Key="SettingsImportFileMissing">The settings file was not found in the selected folder:&#x0a;&#x0a;{0}</sys:String>
+    <sys:String x:Key="ConfirmSettingsImport">Replace the current saved sessions with {0} imported session(s)? Open terminals will remain connected.</sys:String>
+    <sys:String x:Key="SettingsImported">Imported {0} session(s) and UI settings. Private-key paths were not imported; edit a session to select its key when needed.</sys:String>
+    <sys:String x:Key="SettingsTransferFailed">Settings import or export failed: {0}</sys:String>
     <sys:String x:Key="MenuHelp">Help</sys:String>
     <sys:String x:Key="AboutRsyncShell">About ssh-win-gui</sys:String>
     <sys:String x:Key="ToolbarSession">Session</sys:String>

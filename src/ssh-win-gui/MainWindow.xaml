@@ -73,6 +73,9 @@
                     <MenuItem x:Name="EnglishLanguageMenuItem" Header="{DynamicResource LanguageEnglish}" IsCheckable="True" Click="EnglishLanguageMenuItem_OnClick" />
                     <MenuItem x:Name="ChineseLanguageMenuItem" Header="{DynamicResource LanguageChinese}" IsCheckable="True" Click="ChineseLanguageMenuItem_OnClick" />
                 </MenuItem>
+                <Separator />
+                <MenuItem Header="{DynamicResource ExportSettings}" Click="ExportSettingsMenuItem_OnClick" />
+                <MenuItem Header="{DynamicResource ImportSettings}" Click="ImportSettingsMenuItem_OnClick" />
             </MenuItem>
             <MenuItem Header="{DynamicResource MenuHelp}">
                 <MenuItem Header="{DynamicResource AboutRsyncShell}" Click="AboutMenu_OnClick" />

@@ -37,6 +37,16 @@
     <sys:String x:Key="MenuLanguage">语言</sys:String>
     <sys:String x:Key="LanguageEnglish">English</sys:String>
     <sys:String x:Key="LanguageChinese">简体中文</sys:String>
+    <sys:String x:Key="ExportSettings">导出设置...</sys:String>
+    <sys:String x:Key="ImportSettings">导入设置...</sys:String>
+    <sys:String x:Key="SelectSettingsExportFolder">选择设置导出目录</sys:String>
+    <sys:String x:Key="SelectSettingsImportFolder">选择包含 ssh-win-gui-settings.json 的目录</sys:String>
+    <sys:String x:Key="OverwriteSettingsExport">以下导出文件已经存在，是否覆盖？&#x0a;&#x0a;{0}</sys:String>
+    <sys:String x:Key="SettingsExported">设置已导出到：&#x0a;&#x0a;{0}&#x0a;&#x0a;导出文件不包含密码、私钥文件或私钥路径。</sys:String>
+    <sys:String x:Key="SettingsImportFileMissing">所选目录中没有找到设置文件：&#x0a;&#x0a;{0}</sys:String>
+    <sys:String x:Key="ConfirmSettingsImport">将用导入文件中的 {0} 个会话覆盖当前已保存会话。已打开的终端不会关闭。是否继续？</sys:String>
+    <sys:String x:Key="SettingsImported">已导入 {0} 个会话和界面设置。私钥路径未导入，需要时请编辑会话重新选择私钥。</sys:String>
+    <sys:String x:Key="SettingsTransferFailed">设置导入或导出失败：{0}</sys:String>
     <sys:String x:Key="MenuHelp">帮助</sys:String>
     <sys:String x:Key="AboutRsyncShell">关于 ssh-win-gui</sys:String>
     <sys:String x:Key="ToolbarSession">会话</sys:String>

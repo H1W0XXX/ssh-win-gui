@@ -22,6 +22,12 @@ the remote program. Settings > Keyword highlighting > Customize keywords opens
 a three-column editor for literal words or phrases; changes are persisted and
 apply to terminals that are already open.
 
+Settings > Export settings writes `ssh-win-gui-settings.json` to a folder chosen
+by the user. The file contains saved session structure and UI preferences, but
+never passwords, private-key files, key passphrases, or private-key paths.
+Settings > Import settings reads that file from a selected folder and replaces
+the saved-session list after confirmation; open terminals stay connected.
+
 ## Implemented architecture
 
 - .NET 8 WPF owns the window, session tree, tabs, browser and transfer UI.
