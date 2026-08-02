@@ -297,10 +297,26 @@ public partial class MainWindow : Window
         if (sender is not TreeViewItem item) return;
         item.IsSelected = true;
         item.Focus();
-        if (item.Tag is not ConnectionProfile || SessionTree.ContextMenu is null) return;
+        if (item.Tag is not ConnectionProfile || SessionTree.ContextMenu is null)
+        {
+            if (SessionTree.ContextMenu is not null)
+            {
+                SessionTree.ContextMenu.IsOpen = false;
+            }
+            e.Handled = true;
+            return;
+        }
         SessionTree.ContextMenu.PlacementTarget = item;
         SessionTree.ContextMenu.IsOpen = true;
         e.Handled = true;
+    }
+
+    private void SessionTree_OnContextMenuOpening(object sender, ContextMenuEventArgs e)
+    {
+        if (SelectedProfile() is null)
+        {
+            e.Handled = true;
+        }
     }
 
     private async void NewSessionButton_OnClick(object sender, RoutedEventArgs e)

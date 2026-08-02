@@ -221,6 +221,7 @@
                                   FontSize="13"
                                   HorizontalContentAlignment="Stretch"
                                   PreviewMouseLeftButtonDown="SessionTree_OnPreviewMouseLeftButtonDown"
+                                  ContextMenuOpening="SessionTree_OnContextMenuOpening"
                                   SelectedItemChanged="SessionTree_OnSelectedItemChanged">
                             <TreeView.Resources>
                                 <Style TargetType="{x:Type TreeViewItem}">
