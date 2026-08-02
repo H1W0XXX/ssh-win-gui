@@ -1,0 +1,50 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{5E579A59-445D-4DC7-8226-21AE47A77CAA}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ssh-win-gui", "src\ssh-win-gui\ssh-win-gui.csproj", "{1A4EA9AA-8A74-42E1-A568-A6C92078971A}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RsyncShell.Core", "src\RsyncShell.Core\RsyncShell.Core.csproj", "{3F63850E-621E-44BB-AD6D-BBAC40AC295F}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{EDE134A1-B659-409B-9150-BDFE3F529263}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RsyncShell.Core.Tests", "tests\RsyncShell.Core.Tests\RsyncShell.Core.Tests.csproj", "{79495555-D4B6-409D-99DC-73E1A1117765}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RsyncShell.App.Tests", "tests\RsyncShell.App.Tests\RsyncShell.App.Tests.csproj", "{5D97FB68-A60B-45AE-94E2-88559019DD31}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{1A4EA9AA-8A74-42E1-A568-A6C92078971A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1A4EA9AA-8A74-42E1-A568-A6C92078971A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1A4EA9AA-8A74-42E1-A568-A6C92078971A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1A4EA9AA-8A74-42E1-A568-A6C92078971A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{3F63850E-621E-44BB-AD6D-BBAC40AC295F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{3F63850E-621E-44BB-AD6D-BBAC40AC295F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{3F63850E-621E-44BB-AD6D-BBAC40AC295F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{3F63850E-621E-44BB-AD6D-BBAC40AC295F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{79495555-D4B6-409D-99DC-73E1A1117765}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{79495555-D4B6-409D-99DC-73E1A1117765}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{79495555-D4B6-409D-99DC-73E1A1117765}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{79495555-D4B6-409D-99DC-73E1A1117765}.Release|Any CPU.Build.0 = Release|Any CPU
+		{5D97FB68-A60B-45AE-94E2-88559019DD31}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5D97FB68-A60B-45AE-94E2-88559019DD31}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5D97FB68-A60B-45AE-94E2-88559019DD31}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5D97FB68-A60B-45AE-94E2-88559019DD31}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{1A4EA9AA-8A74-42E1-A568-A6C92078971A} = {5E579A59-445D-4DC7-8226-21AE47A77CAA}
+		{3F63850E-621E-44BB-AD6D-BBAC40AC295F} = {5E579A59-445D-4DC7-8226-21AE47A77CAA}
+		{79495555-D4B6-409D-99DC-73E1A1117765} = {EDE134A1-B659-409B-9150-BDFE3F529263}
+		{5D97FB68-A60B-45AE-94E2-88559019DD31} = {EDE134A1-B659-409B-9150-BDFE3F529263}
+	EndGlobalSection
+EndGlobal

@@ -1,0 +1,150 @@
+<Application x:Class="RsyncShell.App.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Application.Resources>
+        <SolidColorBrush x:Key="ChromeBrush" Color="#F4F5F7" />
+        <SolidColorBrush x:Key="ChromeBorderBrush" Color="#C7CCD2" />
+        <SolidColorBrush x:Key="AccentBrush" Color="#1878C8" />
+        <SolidColorBrush x:Key="TerminalBrush" Color="#1E1E1E" />
+        <SolidColorBrush x:Key="MutedTextBrush" Color="#66717E" />
+
+        <Style TargetType="Window">
+            <Setter Property="FontFamily" Value="Segoe UI" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="Background" Value="{StaticResource ChromeBrush}" />
+        </Style>
+
+        <Style x:Key="ToolbarButton" TargetType="Button">
+            <Setter Property="MinWidth" Value="30" />
+            <Setter Property="Height" Value="28" />
+            <Setter Property="Margin" Value="2,0" />
+            <Setter Property="Padding" Value="7,2" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#E1EBF7" />
+                    <Setter Property="BorderBrush" Value="#AFC9E6" />
+                </Trigger>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Opacity" Value="0.45" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="CommandTileButton" TargetType="Button">
+            <Setter Property="Width" Value="70" />
+            <Setter Property="Height" Value="54" />
+            <Setter Property="Margin" Value="1,0" />
+            <Setter Property="Padding" Value="3" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="TileBorder"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="TileBorder" Property="Background" Value="#E7F1FA" />
+                                <Setter TargetName="TileBorder" Property="BorderBrush" Value="#B5D2EB" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="TileBorder" Property="Background" Value="#D4E8F7" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.38" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="RailButton" TargetType="ToggleButton">
+            <Setter Property="Width" Value="39" />
+            <Setter Property="Height" Value="45" />
+            <Setter Property="Margin" Value="0,1" />
+            <Setter Property="FontFamily" Value="Segoe MDL2 Assets" />
+            <Setter Property="FontSize" Value="18" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Grid>
+                            <Border x:Name="RailBackground" Background="Transparent" />
+                            <Border x:Name="SelectionBar" Width="3" HorizontalAlignment="Left" Background="{StaticResource AccentBrush}" Visibility="Collapsed" />
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="RailBackground" Property="Background" Value="#E4E8EC" />
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="RailBackground" Property="Background" Value="#D9EAF8" />
+                                <Setter TargetName="SelectionBar" Property="Visibility" Value="Visible" />
+                                <Setter Property="Foreground" Value="{StaticResource AccentBrush}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="TerminalTabButton" TargetType="ToggleButton">
+            <Setter Property="Height" Value="35" />
+            <Setter Property="MinWidth" Value="136" />
+            <Setter Property="MaxWidth" Value="260" />
+            <Setter Property="Margin" Value="0" />
+            <Setter Property="Padding" Value="11,2" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Foreground" Value="#2E3338" />
+            <Setter Property="Background" Value="#E5E8EB" />
+            <Setter Property="BorderBrush" Value="#C3C8CE" />
+            <Setter Property="BorderThickness" Value="0,0,1,0" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Border x:Name="TabBorder"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                              VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="TabBorder" Property="Background" Value="#F2F5F8" />
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="TabBorder" Property="Background" Value="#1E1E1E" />
+                                <Setter TargetName="TabBorder" Property="BorderBrush" Value="#1E1E1E" />
+                                <Setter Property="Foreground" Value="White" />
+                                <Setter Property="FontWeight" Value="SemiBold" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="RemoteFileItemStyle" TargetType="ListViewItem">
+            <Setter Property="Height" Value="27" />
+            <Setter Property="Padding" Value="3,0" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+        </Style>
+    </Application.Resources>
+</Application>

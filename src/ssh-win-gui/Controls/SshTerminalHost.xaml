@@ -1,0 +1,36 @@
+<UserControl x:Class="RsyncShell.App.Controls.SshTerminalHost"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:terminal="clr-namespace:Microsoft.Terminal.Wpf;assembly=Microsoft.Terminal.Wpf"
+             Background="#1E1E1E">
+    <Grid Background="#1E1E1E">
+        <terminal:TerminalControl x:Name="Terminal" AutoResize="True" Visibility="Collapsed" />
+        <Border x:Name="MessagePanel" Background="#F21E1E1E">
+            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="560">
+                <ProgressBar x:Name="StartProgress" Height="3" IsIndeterminate="True" Margin="0,0,0,18" />
+                <TextBlock x:Name="MessageTitle"
+                           Text="{DynamicResource Connecting}"
+                           Foreground="#E4E8EC"
+                           FontSize="18"
+                           HorizontalAlignment="Center" />
+                <TextBlock x:Name="MessageBody"
+                           Foreground="#91A0AD"
+                           Margin="0,8,0,0"
+                           TextAlignment="Center"
+                           TextWrapping="Wrap" />
+                <Button x:Name="RetryButton"
+                        Content="{DynamicResource Reconnect}"
+                        Width="104"
+                        Margin="0,16,0,0"
+                        Visibility="Collapsed"
+                        Click="RetryButton_OnClick" />
+                <Button x:Name="ChangeCredentialsButton"
+                        Content="{DynamicResource EnterPassword}"
+                        MinWidth="148"
+                        Margin="0,8,0,0"
+                        Visibility="Collapsed"
+                        Click="ChangeCredentialsButton_OnClick" />
+            </StackPanel>
+        </Border>
+    </Grid>
+</UserControl>

@@ -1,0 +1,368 @@
+package main
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"time"
+
+	"github.com/gokrazy/rsync"
+	"github.com/gokrazy/rsync/rsyncclient"
+	"golang.org/x/crypto/ssh"
+)
+
+func validateTransferRequest(req *TransferRequest) error {
+	if req.Direction != "upload" && req.Direction != "download" {
+		return errorCode("invalid_request", fmt.Errorf("direction must be upload or download, got %q", req.Direction))
+	}
+	if strings.TrimSpace(req.LocalPath) == "" || strings.TrimSpace(req.RemotePath) == "" {
+		return errorCode("invalid_request", errors.New("localPath and remotePath are required"))
+	}
+	if strings.ContainsAny(req.RemotePath, "\x00\r\n") {
+		return errorCode("invalid_request", errors.New("remotePath must not contain NUL or line breaks"))
+	}
+	if !strings.HasPrefix(req.RemotePath, "/") {
+		return errorCode("invalid_request", errors.New("remotePath must be an absolute POSIX path"))
+	}
+	if strings.TrimSpace(req.Remote.Host) == "" || strings.TrimSpace(req.Remote.User) == "" {
+		return errorCode("invalid_request", errors.New("remote.host and remote.user are required"))
+	}
+	if req.Remote.Port < 0 || req.Remote.Port > 65535 {
+		return errorCode("invalid_request", errors.New("remote.port must be between 1 and 65535, or 0 for port 22"))
+	}
+	if req.Options.Partial {
+		return errorCode("unsupported_option", errors.New("partial-file retention is unsupported by the pinned Go rsync implementation"))
+	}
+	if req.Options.DryRun {
+		return errorCode("unsupported_option", errors.New("dry-run is disabled because the pinned Go rsync receiver writes non-protocol data to stdout"))
+	}
+	if req.Options.Delete {
+		return errorCode("unsupported_option", errors.New("delete is disabled because the pinned Go rsync implementation does not reliably forward it to the remote receiver"))
+	}
+	return validateSecurityConfig(req.Remote)
+}
+
+func validateSecurityConfig(remote RemoteEndpoint) error {
+	switch remote.Auth.Method {
+	case "password":
+		if remote.Auth.Password == "" {
+			return errorCode("invalid_request", errors.New("password authentication requires password"))
+		}
+	case "private_key":
+		if remote.Auth.PrivateKeyPath == "" {
+			return errorCode("invalid_request", errors.New("private_key authentication requires privateKeyPath"))
+		}
+	default:
+		return errorCode("unsupported_authentication", fmt.Errorf("authentication method %q is unsupported", remote.Auth.Method))
+	}
+
+	mode := remote.HostKey.Mode
+	if mode == "" || mode == "known_hosts" {
+		return nil
+	}
+	if mode == "sha256" {
+		fingerprintCount := len(remote.HostKey.SHA256Fingerprints)
+		if strings.TrimSpace(remote.HostKey.SHA256) != "" {
+			fingerprintCount++
+		}
+		if fingerprintCount == 0 {
+			return errorCode("invalid_request", errors.New("sha256 host-key mode requires at least one OpenSSH SHA256:... fingerprint"))
+		}
+		return nil
+	}
+	if mode == "log_only" {
+		return nil
+	}
+	return errorCode("unsupported_host_key_policy", fmt.Errorf("host-key mode %q is unsupported", mode))
+}
+
+func runTransfer(ctx context.Context, req TransferRequest, reporter *jobReporter) (*TransferStat, error) {
+	if req.Direction == "upload" {
+		if _, err := os.Stat(req.LocalPath); err != nil {
+			return nil, errorCode("local_path", fmt.Errorf("read upload source: %w", err))
+		}
+	}
+
+	reporter.state("connecting")
+	sshClient, err := dialSSH(ctx, req.Remote, reporter)
+	if err != nil {
+		return nil, err
+	}
+	defer sshClient.Close()
+
+	reporter.log("warning", "SSH connected without host-key verification")
+	reporter.state("transferring")
+	return runRsyncOverSSH(ctx, sshClient, req, reporter)
+}
+
+func runRsyncOverSSH(ctx context.Context, sshClient *ssh.Client, req TransferRequest, reporter *jobReporter) (*TransferStat, error) {
+	args := buildRsyncArgs(req.Options)
+	clientOptions := []rsyncclient.Option{rsyncclient.WithStderr(&rsyncLogWriter{reporter: reporter, level: "info"})}
+	if req.Direction == "upload" {
+		clientOptions = append(clientOptions, rsyncclient.WithSender())
+	}
+	client, err := rsyncclient.New(args, clientOptions...)
+	if err != nil {
+		return nil, errorCode("unsupported_option", fmt.Errorf("create rsync client: %w", err))
+	}
+
+	session, err := sshClient.NewSession()
+	if err != nil {
+		return nil, errorCode("ssh_session", fmt.Errorf("create SSH session: %w", err))
+	}
+	defer session.Close()
+
+	stdin, err := session.StdinPipe()
+	if err != nil {
+		return nil, errorCode("ssh_session", fmt.Errorf("open SSH stdin: %w", err))
+	}
+	stdout, err := session.StdoutPipe()
+	if err != nil {
+		return nil, errorCode("ssh_session", fmt.Errorf("open SSH stdout: %w", err))
+	}
+	stderr, err := session.StderrPipe()
+	if err != nil {
+		return nil, errorCode("ssh_session", fmt.Errorf("open SSH stderr: %w", err))
+	}
+
+	remotePath := req.RemotePath
+	if req.Direction == "download" && req.CopyContents {
+		remotePath = ensureRemoteTrailingSlash(remotePath)
+	}
+	serverArgs := forceProtocol(client.ServerCommandOptions(remotePath))
+	remoteCommand := "command rsync " + joinShellArgs(serverArgs)
+	if err := session.Start("sh -c " + shellQuote(remoteCommand)); err != nil {
+		return nil, errorCode("remote_rsync", fmt.Errorf("start remote rsync: %w", err))
+	}
+
+	stderrDone := make(chan struct{})
+	go func() {
+		defer close(stderrDone)
+		copyRsyncLogs(stderr, reporter)
+	}()
+
+	activity := &activityReadWriter{Reader: stdout, Writer: stdin}
+	stopProgress := make(chan struct{})
+	progressDone := make(chan struct{})
+	go reportProgress(activity, reporter, stopProgress, progressDone)
+
+	cancelWatchDone := make(chan struct{})
+	go func() {
+		select {
+		case <-ctx.Done():
+			_ = session.Close()
+		case <-cancelWatchDone:
+		}
+	}()
+	defer close(cancelWatchDone)
+
+	localPath := req.LocalPath
+	if req.Direction == "upload" && req.CopyContents {
+		localPath = ensureLocalTrailingSlash(localPath)
+	}
+	result, runErr := client.Run(ctx, activity, []string{localPath})
+	close(stopProgress)
+	<-progressDone
+
+	stats := &TransferStat{
+		ProtocolRead:    activity.read.Load(),
+		ProtocolWritten: activity.written.Load(),
+	}
+	if result != nil && result.Stats != nil {
+		stats.SourceSize = result.Stats.Size
+	}
+	if runErr != nil {
+		_ = session.Close()
+		<-stderrDone
+		if ctx.Err() != nil {
+			return stats, ctx.Err()
+		}
+		return stats, errorCode("rsync_protocol", fmt.Errorf("rsync protocol failed: %w", runErr))
+	}
+	_ = stdin.Close()
+	if waitErr := session.Wait(); waitErr != nil {
+		<-stderrDone
+		if ctx.Err() != nil {
+			return stats, ctx.Err()
+		}
+		return stats, errorCode("remote_rsync", fmt.Errorf("remote rsync exited unsuccessfully: %w", waitErr))
+	}
+	<-stderrDone
+	reporter.progress("transfer", stats.ProtocolRead, stats.ProtocolWritten)
+	return stats, nil
+}
+
+func buildRsyncArgs(options TransferOptions) []string {
+	args := []string{"-r"}
+	if options.PreserveTimes {
+		args = append(args, "-t")
+	}
+	if options.PreservePermissions {
+		args = append(args, "-p")
+	}
+	if options.PreserveLinks {
+		args = append(args, "-l")
+	}
+	if options.Compress {
+		args = append(args, "-z")
+	}
+	return args
+}
+
+func forceProtocol(args []string) []string {
+	protocolArg := fmt.Sprintf("--protocol=%d", rsync.ProtocolVersion)
+	for _, arg := range args {
+		if strings.HasPrefix(arg, "--protocol=") {
+			return args
+		}
+	}
+	out := make([]string, 0, len(args)+1)
+	if len(args) > 0 && args[0] == "--server" {
+		out = append(out, args[0], protocolArg)
+		return append(out, args[1:]...)
+	}
+	out = append(out, protocolArg)
+	return append(out, args...)
+}
+
+func ensureLocalTrailingSlash(path string) string {
+	cleaned := filepath.Clean(path)
+	return strings.TrimRight(cleaned, `/\\`) + "/"
+}
+
+func ensureRemoteTrailingSlash(path string) string {
+	if path == "/" {
+		return path
+	}
+	return strings.TrimRight(path, "/") + "/"
+}
+
+func shellQuote(value string) string {
+	return "'" + strings.ReplaceAll(value, "'", `'"'"'`) + "'"
+}
+
+func joinShellArgs(args []string) string {
+	quoted := make([]string, 0, len(args))
+	for _, arg := range args {
+		quoted = append(quoted, shellQuote(arg))
+	}
+	return strings.Join(quoted, " ")
+}
+
+type activityReadWriter struct {
+	io.Reader
+	io.Writer
+	read    atomic.Int64
+	written atomic.Int64
+}
+
+func (rw *activityReadWriter) Read(p []byte) (int, error) {
+	n, err := rw.Reader.Read(p)
+	if n > 0 {
+		rw.read.Add(int64(n))
+	}
+	return n, err
+}
+
+func (rw *activityReadWriter) Write(p []byte) (int, error) {
+	n, err := rw.Writer.Write(p)
+	if n > 0 {
+		rw.written.Add(int64(n))
+	}
+	return n, err
+}
+
+func reportProgress(activity *activityReadWriter, reporter *jobReporter, stop <-chan struct{}, done chan<- struct{}) {
+	defer close(done)
+	ticker := time.NewTicker(500 * time.Millisecond)
+	defer ticker.Stop()
+	var previousRead, previousWritten int64 = -1, -1
+	for {
+		select {
+		case <-ticker.C:
+			read := activity.read.Load()
+			written := activity.written.Load()
+			if read != previousRead || written != previousWritten {
+				reporter.progress("transfer", read, written)
+				previousRead, previousWritten = read, written
+			}
+		case <-stop:
+			return
+		}
+	}
+}
+
+type rsyncLogWriter struct {
+	reporter           *jobReporter
+	level              string
+	mu                 sync.Mutex
+	buffer             strings.Builder
+	truncated          bool
+	emittedLines       int
+	suppressionEmitted bool
+}
+
+const maxDiagnosticLineBytes = 64 * 1024
+const maxDiagnosticLines = 200
+
+func (w *rsyncLogWriter) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	n := len(p)
+	for _, b := range p {
+		if b == '\n' || b == '\r' {
+			w.flushLocked()
+			continue
+		}
+		if w.buffer.Len() < maxDiagnosticLineBytes {
+			w.buffer.WriteByte(b)
+		} else {
+			w.truncated = true
+		}
+	}
+	return n, nil
+}
+
+func (w *rsyncLogWriter) flushLocked() {
+	line := strings.TrimSpace(w.buffer.String())
+	w.buffer.Reset()
+	truncated := w.truncated
+	w.truncated = false
+	if truncated {
+		line += " ... [diagnostic line truncated]"
+	}
+	if line != "" {
+		level := w.level
+		if level == "" {
+			level = "info"
+		}
+		if w.emittedLines < maxDiagnosticLines {
+			w.reporter.log(level, line)
+			w.emittedLines++
+		} else if !w.suppressionEmitted {
+			w.reporter.log(level, "Further rsync diagnostic lines were suppressed.")
+			w.suppressionEmitted = true
+		}
+	}
+}
+
+func (w *rsyncLogWriter) flush() {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.flushLocked()
+}
+
+func copyRsyncLogs(reader io.Reader, reporter *jobReporter) {
+	writer := &rsyncLogWriter{reporter: reporter, level: "error"}
+	_, err := io.Copy(writer, reader)
+	writer.flush()
+	if err != nil {
+		reporter.log("error", "read remote rsync diagnostics: "+err.Error())
+	}
+}
