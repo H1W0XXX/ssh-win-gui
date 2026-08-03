@@ -99,7 +99,24 @@ The script limits Go to 8 logical workers and MSBuild to 4 nodes, runs Go
 tests/vet plus the .NET build and tests, then atomically replaces the fixed
 `artifacts\publish\ssh-win-gui-win-x64` directory and matching `.zip`. It does
 not create timestamped package directories. The package includes SHA-256
-checksums and only English/Simplified-Chinese UI resources.
+checksums and only English/Simplified-Chinese UI resources. It also publishes
+the self-contained STDIO MCP server at `tools\mcp\ssh-win-gui-mcp.exe`.
+
+To make saved sessions available to Codex globally, register that executable:
+
+```powershell
+codex mcp add ssh_win_gui -- D:\ssh-win-gui-win-x64\tools\mcp\ssh-win-gui-mcp.exe
+```
+
+The MCP server exposes `list_sessions` and `run_script`. `run_script` sends the
+UTF-8 script directly to remote `sh -s` over SSH stdin, avoiding a local
+PowerShell/`ssh.exe` quoting layer. It reuses saved private-key, SOCKS5 and jump
+routes and strictly requires a fingerprint already approved by the GUI. It
+never returns private-key paths and intentionally does not support password or
+private-key-passphrase prompts. See [Codex SSH MCP integration](docs/codex-mcp.md)
+for the complete tool schema, agent instructions, security boundary, and
+troubleshooting guide. Codex-compatible agents working in this repository also
+load the concise rules in [AGENTS.md](AGENTS.md).
 
 The worker binary is deliberately ignored by Git. The app loads it only from
 its own `tools\rsync` directory; it does not search environment overrides,

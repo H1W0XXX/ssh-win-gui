@@ -19,6 +19,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\RsyncShell.Core\RsyncShell.Core.csproj" />
+    <ProjectReference Include="..\..\src\RsyncShell.Mcp\RsyncShell.Mcp.csproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -136,12 +136,15 @@ try {
 
     $solution = Join-Path $repoRoot "RsyncShell.sln"
     Invoke-Checked -FilePath "dotnet" -ArgumentList @("restore", $solution) -WorkingDirectory $repoRoot
+    $appProject = Join-Path $repoRoot "src\ssh-win-gui\ssh-win-gui.csproj"
+    $mcpProject = Join-Path $repoRoot "src\RsyncShell.Mcp\RsyncShell.Mcp.csproj"
+    Invoke-Checked -FilePath "dotnet" -ArgumentList @("restore", $appProject, "-r", "win-x64") -WorkingDirectory $repoRoot
+    Invoke-Checked -FilePath "dotnet" -ArgumentList @("restore", $mcpProject, "-r", "win-x64") -WorkingDirectory $repoRoot
     if (-not $SkipTests) {
         Invoke-Checked -FilePath "dotnet" -ArgumentList @("build", $solution, "-c", $Configuration, "--no-restore", "-m:4") -WorkingDirectory $repoRoot
         Invoke-Checked -FilePath "dotnet" -ArgumentList @("test", $solution, "-c", $Configuration, "--no-build", "--no-restore", "-m:4") -WorkingDirectory $repoRoot
     }
 
-    $appProject = Join-Path $repoRoot "src\ssh-win-gui\ssh-win-gui.csproj"
     $selfContained = if ($FrameworkDependent) { "false" } else { "true" }
     Invoke-Checked -FilePath "dotnet" -ArgumentList @(
         "publish", $appProject,
@@ -153,6 +156,21 @@ try {
         "-p:DebugSymbols=false",
         "-p:DebugType=None",
         "-o", $stagingDirectory
+    ) -WorkingDirectory $repoRoot
+
+    $mcpDirectory = Join-Path $stagingDirectory "tools\mcp"
+    New-Item -ItemType Directory -Path $mcpDirectory -Force | Out-Null
+    Invoke-Checked -FilePath "dotnet" -ArgumentList @(
+        "publish", $mcpProject,
+        "-c", $Configuration,
+        "-r", "win-x64",
+        "--self-contained", $selfContained,
+        "--no-restore",
+        "-m:4",
+        "-p:PublishSingleFile=true",
+        "-p:DebugSymbols=false",
+        "-p:DebugType=None",
+        "-o", $mcpDirectory
     ) -WorkingDirectory $repoRoot
 
     $workerDirectory = Join-Path $stagingDirectory "tools\rsync"
