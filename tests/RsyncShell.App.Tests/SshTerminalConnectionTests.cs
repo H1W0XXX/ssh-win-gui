@@ -76,6 +76,33 @@ public sealed class SshTerminalConnectionTests
     }
 
     [Theory]
+    [InlineData(0x0100, 0x2D, true, false, false, true, true)]
+    [InlineData(0x0101, 0x2D, true, false, false, true, false)]
+    [InlineData(0x0100, 0x2D, false, false, false, false, false)]
+    [InlineData(0x0100, 0x2D, true, true, false, false, false)]
+    [InlineData(0x0100, 0x26, true, false, false, false, false)]
+    public void ShiftInsertConsumesNativeKeyAndPastesOnlyOnKeyDown(
+        int message,
+        int virtualKey,
+        bool shift,
+        bool control,
+        bool alt,
+        bool expectedHandled,
+        bool expectedPaste)
+    {
+        var handled = SshTerminalHost.TryGetKeyboardPasteAction(
+            message,
+            virtualKey,
+            shift,
+            control,
+            alt,
+            out var paste);
+
+        Assert.Equal(expectedHandled, handled);
+        Assert.Equal(expectedPaste, paste);
+    }
+
+    [Theory]
     [InlineData(0x0207, TerminalMousePasteButton.Middle, true, false)]
     [InlineData(0x0208, TerminalMousePasteButton.Middle, true, true)]
     [InlineData(0x0204, TerminalMousePasteButton.Right, true, false)]
@@ -119,6 +146,36 @@ public sealed class SshTerminalConnectionTests
         tracker.Append(output);
 
         Assert.Equal(expected, tracker.IsActive);
+    }
+
+    [Fact]
+    public void TerminalModeTrackerHandlesSplitBracketedPasteSequences()
+    {
+        var tracker = new AlternateScreenTracker();
+
+        tracker.Append("\x1b[?20");
+        Assert.False(tracker.IsBracketedPasteEnabled);
+        tracker.Append("04h");
+        Assert.True(tracker.IsBracketedPasteEnabled);
+        tracker.Append("\x1b[?2004l");
+        Assert.False(tracker.IsBracketedPasteEnabled);
+    }
+
+    [Theory]
+    [InlineData("one\r\ntwo\nthree\rfour", "one\rtwo\rthree\rfour")]
+    [InlineData("tab\tallowed\0removed\x1bremoved", "tab\tallowedremovedremoved")]
+    [InlineData("中文\u0085保留内容", "中文保留内容")]
+    public void ClipboardPasteMatchesWindowsTerminalFiltering(string input, string expected)
+    {
+        Assert.Equal(expected, SshTerminalHost.PrepareTextForPaste(input, bracketedPaste: false));
+    }
+
+    [Fact]
+    public void ClipboardPasteUsesBracketedPasteWhenRemoteEnablesIt()
+    {
+        var actual = SshTerminalHost.PrepareTextForPaste("first\r\nsecond", bracketedPaste: true);
+
+        Assert.Equal("\x1b[200~first\rsecond\x1b[201~", actual);
     }
 
     [Theory]

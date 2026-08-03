@@ -6,6 +6,7 @@ internal sealed class AlternateScreenTracker
     private string _tail = string.Empty;
 
     public bool IsActive { get; private set; }
+    public bool IsBracketedPasteEnabled { get; private set; }
 
     public void Append(string data)
     {
@@ -37,6 +38,10 @@ internal sealed class AlternateScreenTracker
             {
                 IsActive = input[end] == 'h';
             }
+            if (ContainsMode(parameters, "2004"))
+            {
+                IsBracketedPasteEnabled = input[end] == 'h';
+            }
             index = end;
         }
 
@@ -46,16 +51,22 @@ internal sealed class AlternateScreenTracker
     public void Reset()
     {
         IsActive = false;
+        IsBracketedPasteEnabled = false;
         _tail = string.Empty;
     }
 
     private static bool ContainsAlternateScreenMode(ReadOnlySpan<char> parameters)
+        => ContainsMode(parameters, "47") ||
+           ContainsMode(parameters, "1047") ||
+           ContainsMode(parameters, "1049");
+
+    private static bool ContainsMode(ReadOnlySpan<char> parameters, ReadOnlySpan<char> mode)
     {
         while (!parameters.IsEmpty)
         {
             var separator = parameters.IndexOf(';');
             var value = separator < 0 ? parameters : parameters[..separator];
-            if (value is "47" or "1047" or "1049")
+            if (value.SequenceEqual(mode))
             {
                 return true;
             }

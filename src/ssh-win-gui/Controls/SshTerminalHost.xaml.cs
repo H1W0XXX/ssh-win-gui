@@ -2,6 +2,7 @@ using System.Windows.Media;
 using System.Windows.Input;
 using System.Windows.Threading;
 using System.Runtime.InteropServices;
+using System.Text;
 using Microsoft.Terminal.Wpf;
 using RsyncShell.App.Services;
 using RsyncShell.Core.Models;
@@ -317,6 +318,14 @@ public partial class SshTerminalHost : System.Windows.Controls.UserControl, ITer
         }
 
         var key = e.Key == Key.System ? e.SystemKey : e.Key;
+        if (key == Key.Insert &&
+            (Keyboard.Modifiers & (ModifierKeys.Shift | ModifierKeys.Control | ModifierKeys.Alt)) == ModifierKeys.Shift)
+        {
+            PasteClipboardText();
+            e.Handled = true;
+            return;
+        }
+
         if (!ShouldForwardNativeNavigationKey(key, Keyboard.Modifiers))
         {
             return;
@@ -348,6 +357,32 @@ public partial class SshTerminalHost : System.Windows.Controls.UserControl, ITer
             _ => false,
         };
 
+    private static bool IsKeyboardMessage(int message) =>
+        message is 0x0100 or 0x0101 or 0x0104 or 0x0105;
+
+    internal static int ExtractVirtualKey(IntPtr wParam) =>
+        unchecked((int)wParam.ToInt64()) & 0xFFFF;
+
+    private static bool IsVirtualKeyDown(int virtualKey) =>
+        (GetKeyState(virtualKey) & 0x8000) != 0 ||
+        (GetAsyncKeyState(virtualKey) & 0x8000) != 0;
+
+    internal static bool TryGetKeyboardPasteAction(
+        int message,
+        int virtualKey,
+        bool shiftPressed,
+        bool controlPressed,
+        bool altPressed,
+        out bool pasteNow)
+    {
+        const int WmKeyDown = 0x0100;
+        const int WmKeyUp = 0x0101;
+        const int VkInsert = 0x2D;
+        var isShortcut = virtualKey == VkInsert && shiftPressed && !controlPressed && !altPressed;
+        pasteNow = isShortcut && message == WmKeyDown;
+        return isShortcut && (message == WmKeyDown || message == WmKeyUp);
+    }
+
     private IntPtr TerminalContainerMessageHook(
         IntPtr hwnd,
         int message,
@@ -362,6 +397,30 @@ public partial class SshTerminalHost : System.Windows.Controls.UserControl, ITer
         if (_disposed || _terminalContainer is null || hwnd != _terminalContainer.Handle)
         {
             return IntPtr.Zero;
+        }
+
+        if (IsKeyboardMessage(message))
+        {
+            var keyboardVirtualKey = ExtractVirtualKey(wParam);
+            if (TryGetKeyboardPasteAction(
+                    message,
+                    keyboardVirtualKey,
+                    IsVirtualKeyDown(0x10),
+                    IsVirtualKeyDown(0x11),
+                    IsVirtualKeyDown(0x12),
+                    out var keyboardPasteNow))
+            {
+                handled = true;
+                if (keyboardPasteNow)
+                {
+                    PasteClipboardText();
+                    if (InputDiagnostics)
+                    {
+                        DiagnosticLog.Write("TerminalInput", "Native terminal hook handled Shift+Insert paste.");
+                    }
+                }
+                return IntPtr.Zero;
+            }
         }
 
         if (message == WmLeftButtonDown)
@@ -521,13 +580,14 @@ public partial class SshTerminalHost : System.Windows.Controls.UserControl, ITer
                 var text = System.Windows.Clipboard.GetText();
                 if (!string.IsNullOrEmpty(text))
                 {
+                    var paste = PrepareTextForPaste(text, _alternateScreen.IsBracketedPasteEnabled);
                     if (_connection is not null)
                     {
-                        _connection.WriteInput(text);
+                        _connection.WriteInput(paste);
                     }
                     else
                     {
-                        _passwordPrompt?.WriteInput(text);
+                        _passwordPrompt?.WriteInput(paste);
                     }
                 }
             }
@@ -536,6 +596,35 @@ public partial class SshTerminalHost : System.Windows.Controls.UserControl, ITer
         {
             DiagnosticLog.Write("TerminalClipboard", $"Clipboard paste failed: {ex.Message}");
         }
+    }
+
+    internal static string PrepareTextForPaste(string text, bool bracketedPaste)
+    {
+        var filtered = new StringBuilder(text.Length);
+        for (var index = 0; index < text.Length; index++)
+        {
+            var character = text[index];
+            if (character == '\n')
+            {
+                if (index == 0 || text[index - 1] != '\r')
+                {
+                    filtered.Append('\r');
+                }
+                continue;
+            }
+
+            var controlCode = character < '\x20' || character is >= '\x7f' and <= '\x9f';
+            if (controlCode && character is not ('\t' or '\r'))
+            {
+                continue;
+            }
+
+            filtered.Append(character);
+        }
+
+        return bracketedPaste
+            ? "\x1b[200~" + filtered + "\x1b[201~"
+            : filtered.ToString();
     }
 
     public void PasteClipboard() => PasteClipboardText();
@@ -602,6 +691,9 @@ public partial class SshTerminalHost : System.Windows.Controls.UserControl, ITer
 
     [DllImport("user32.dll")]
     private static extern short GetKeyState(int virtualKey);
+
+    [DllImport("user32.dll")]
+    private static extern short GetAsyncKeyState(int virtualKey);
 
     [DllImport("user32.dll")]
     private static extern uint MapVirtualKey(uint code, uint mapType);

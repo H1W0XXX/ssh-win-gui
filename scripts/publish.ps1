@@ -116,6 +116,21 @@ Assert-DirectChildPath -Root $publishRoot -Path $stagingDirectory -AllowedNamePa
 Assert-DirectChildPath -Root $publishRoot -Path $previousDirectory -AllowedNamePattern '^\.ssh-win-gui-win-x64\.previous-\d+$'
 Assert-DirectChildPath -Root $publishRoot -Path $stagingZip -AllowedNamePattern '^\.ssh-win-gui-win-x64\.staging-\d+\.zip$'
 
+# A previous publish can leave its verified staging/backup path behind when a
+# running helper executable temporarily locks it. Sweep only direct children
+# with the exact generated names so a later publish does not accumulate them.
+Get-ChildItem -LiteralPath $publishRoot -Force | Where-Object {
+    $_.Name -match '^\.ssh-win-gui-win-x64\.(?:staging|previous)-\d+(?:\.zip)?$'
+} | ForEach-Object {
+    $allowedPattern = if ($_.PSIsContainer) {
+        '^\.ssh-win-gui-win-x64\.(?:staging|previous)-\d+$'
+    }
+    else {
+        '^\.ssh-win-gui-win-x64\.staging-\d+\.zip$'
+    }
+    Remove-VerifiedItem -Root $publishRoot -Path $_.FullName -AllowedNamePattern $allowedPattern
+}
+
 Remove-VerifiedItem -Root $publishRoot -Path $stagingDirectory -AllowedNamePattern '^\.ssh-win-gui-win-x64\.staging-\d+$'
 Remove-VerifiedItem -Root $publishRoot -Path $previousDirectory -AllowedNamePattern '^\.ssh-win-gui-win-x64\.previous-\d+$'
 Remove-VerifiedItem -Root $publishRoot -Path $stagingZip -AllowedNamePattern '^\.ssh-win-gui-win-x64\.staging-\d+\.zip$'
