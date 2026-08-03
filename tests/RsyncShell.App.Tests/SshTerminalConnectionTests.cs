@@ -1,7 +1,6 @@
 using System.Text;
 using RsyncShell.App.Controls;
 using RsyncShell.App.Services;
-using System.Windows.Input;
 
 namespace RsyncShell.App.Tests;
 
@@ -53,114 +52,6 @@ public sealed class SshTerminalConnectionTests
     }
 
     [Theory]
-    [InlineData(Key.Tab, "\t")]
-    [InlineData(Key.Up, "\x1b[A")]
-    [InlineData(Key.Down, "\x1b[B")]
-    [InlineData(Key.Left, "\x1b[D")]
-    [InlineData(Key.Right, "\x1b[C")]
-    [InlineData(Key.Home, "\x1b[H")]
-    [InlineData(Key.End, "\x1b[F")]
-    [InlineData(Key.PageUp, "\x1b[5~")]
-    [InlineData(Key.PageDown, "\x1b[6~")]
-    [InlineData(Key.Delete, "\x1b[3~")]
-    public void NavigationKeysUseCanonicalXtermSequences(Key key, string expected)
-    {
-        Assert.Equal(expected, SshTerminalHost.TranslateNavigationKey(key));
-    }
-
-    [Theory]
-    [InlineData(0x0100, 0x09, true, true, "\t")]
-    [InlineData(0x0101, 0x09, true, false, "\t")]
-    [InlineData(0x0100, 0x26, true, true, "\x1b[A")]
-    [InlineData(0x0101, 0x26, true, false, "\x1b[A")]
-    [InlineData(0x0100, 0x28, true, true, "\x1b[B")]
-    [InlineData(0x0100, 0x21, true, true, "\x1b[5~")]
-    [InlineData(0x0101, 0x21, true, false, "\x1b[5~")]
-    [InlineData(0x0100, 0x22, true, true, "\x1b[6~")]
-    [InlineData(0x0101, 0x22, true, false, "\x1b[6~")]
-    [InlineData(0x0102, 0x26, false, false, null)]
-    [InlineData(0x0100, 0x41, false, false, null)]
-    public void ThreadKeyboardMessagesConsumeNavigationBeforeNativeDispatch(
-        int message,
-        int virtualKey,
-        bool expectedHandled,
-        bool expectedWrite,
-        string? expectedSequence)
-    {
-        var handled = SshTerminalHost.TryTranslateNavigationMessage(
-            message,
-            virtualKey,
-            out var sequence,
-            out var write);
-
-        Assert.Equal(expectedHandled, handled);
-        Assert.Equal(expectedWrite, write);
-        Assert.Equal(expectedSequence, sequence);
-    }
-
-    [Fact]
-    public void VirtualKeyExtractionIgnoresHighPointerBitsWithoutOverflow()
-    {
-        var wParam = new IntPtr(unchecked((long)0x7FFF_FFFF_0000_0026));
-
-        Assert.Equal(0x26, SshTerminalHost.ExtractVirtualKey(wParam));
-    }
-
-    [Theory]
-    [InlineData(0x0100, 0x2D, true, false, false, true, true)]
-    [InlineData(0x0101, 0x2D, true, false, false, true, false)]
-    [InlineData(0x0100, 0x2D, false, false, false, false, false)]
-    [InlineData(0x0100, 0x2D, true, true, false, false, false)]
-    [InlineData(0x0100, 0x26, true, false, false, false, false)]
-    public void ShiftInsertConsumesNativeKeyAndPastesOnlyOnKeyDown(
-        int message,
-        int virtualKey,
-        bool shift,
-        bool control,
-        bool alt,
-        bool expectedHandled,
-        bool expectedPaste)
-    {
-        var handled = SshTerminalHost.TryGetKeyboardPasteAction(
-            message,
-            virtualKey,
-            shift,
-            control,
-            alt,
-            out var paste);
-
-        Assert.Equal(expectedHandled, handled);
-        Assert.Equal(expectedPaste, paste);
-    }
-
-    [Theory]
-    [InlineData(Key.Insert, ModifierKeys.Shift, true)]
-    [InlineData(Key.Insert, ModifierKeys.None, false)]
-    [InlineData(Key.Insert, ModifierKeys.Shift | ModifierKeys.Control, false)]
-    [InlineData(Key.Delete, ModifierKeys.Shift, false)]
-    public void ShiftInsertWpfFallbackRequiresExactShortcut(
-        Key key,
-        ModifierKeys modifiers,
-        bool expected)
-    {
-        Assert.Equal(expected, SshTerminalHost.IsShiftInsert(key, modifiers));
-    }
-
-    [Fact]
-    public void ShiftInsertWpfFallbackUsesModifierStateTrackedByNativeHook()
-    {
-        Assert.True(SshTerminalHost.IsShiftInsert(
-            Key.Insert,
-            ModifierKeys.None,
-            trackedShift: true));
-        Assert.False(SshTerminalHost.IsShiftInsert(
-            Key.Insert,
-            ModifierKeys.None,
-            trackedShift: true,
-            trackedControl: true));
-    }
-
-    [Theory]
     [InlineData(0x0207, TerminalMousePasteButton.Middle, true, false)]
     [InlineData(0x0208, TerminalMousePasteButton.Middle, true, true)]
     [InlineData(0x0204, TerminalMousePasteButton.Right, true, false)]
@@ -207,23 +98,28 @@ public sealed class SshTerminalConnectionTests
     }
 
     [Theory]
-    [InlineData(120, "\x1b[A\x1b[A\x1b[A")]
-    [InlineData(-120, "\x1b[B\x1b[B\x1b[B")]
-    [InlineData(240, "\x1b[A\x1b[A\x1b[A\x1b[A\x1b[A\x1b[A")]
-    public void AlternateScreenWheelProducesThreeCursorKeysPerDetent(int delta, string expected)
+    [InlineData(120, 0x26, 3)]
+    [InlineData(-120, 0x28, 3)]
+    [InlineData(240, 0x26, 6)]
+    public void AlternateScreenWheelRequestsNativeCursorKeys(
+        int delta,
+        int expectedVirtualKey,
+        int expectedRepeatCount)
     {
         var remainder = 0;
 
-        var handled = SshTerminalHost.TryTranslateAlternateScreenWheelMessage(
+        var handled = SshTerminalHost.TryGetAlternateScreenWheelNavigation(
             0x020A,
             WheelWParam(delta),
             alternateScreen: true,
             hasModifier: false,
             ref remainder,
-            out var sequence);
+            out var virtualKey,
+            out var repeatCount);
 
         Assert.True(handled);
-        Assert.Equal(expected, sequence);
+        Assert.Equal(expectedVirtualKey, virtualKey);
+        Assert.Equal(expectedRepeatCount, repeatCount);
         Assert.Equal(0, remainder);
     }
 
@@ -232,13 +128,15 @@ public sealed class SshTerminalConnectionTests
     {
         var remainder = 0;
 
-        Assert.True(SshTerminalHost.TryTranslateAlternateScreenWheelMessage(
-            0x020A, WheelWParam(60), true, false, ref remainder, out var first));
-        Assert.Null(first);
+        Assert.True(SshTerminalHost.TryGetAlternateScreenWheelNavigation(
+            0x020A, WheelWParam(60), true, false, ref remainder, out var firstKey, out var firstCount));
+        Assert.Equal(0, firstKey);
+        Assert.Equal(0, firstCount);
         Assert.Equal(60, remainder);
-        Assert.True(SshTerminalHost.TryTranslateAlternateScreenWheelMessage(
-            0x020A, WheelWParam(60), true, false, ref remainder, out var second));
-        Assert.Equal("\x1b[A\x1b[A\x1b[A", second);
+        Assert.True(SshTerminalHost.TryGetAlternateScreenWheelNavigation(
+            0x020A, WheelWParam(60), true, false, ref remainder, out var secondKey, out var secondCount));
+        Assert.Equal(0x26, secondKey);
+        Assert.Equal(3, secondCount);
         Assert.Equal(0, remainder);
     }
 
@@ -249,16 +147,18 @@ public sealed class SshTerminalConnectionTests
     {
         var remainder = 60;
 
-        var handled = SshTerminalHost.TryTranslateAlternateScreenWheelMessage(
+        var handled = SshTerminalHost.TryGetAlternateScreenWheelNavigation(
             0x020A,
             WheelWParam(120),
             alternateScreen,
             hasModifier,
             ref remainder,
-            out var sequence);
+            out var virtualKey,
+            out var repeatCount);
 
         Assert.False(handled);
-        Assert.Null(sequence);
+        Assert.Equal(0, virtualKey);
+        Assert.Equal(0, repeatCount);
         Assert.Equal(0, remainder);
     }
 

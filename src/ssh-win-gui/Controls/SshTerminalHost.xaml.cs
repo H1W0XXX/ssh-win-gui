@@ -2,7 +2,6 @@ using System.Windows.Media;
 using System.Windows.Input;
 using System.Windows.Threading;
 using System.Runtime.InteropServices;
-using System.Windows.Interop;
 using Microsoft.Terminal.Wpf;
 using RsyncShell.App.Services;
 using RsyncShell.Core.Models;
@@ -21,11 +20,7 @@ public partial class SshTerminalHost : System.Windows.Controls.UserControl, ITer
     private TerminalContainer? _terminalContainer;
     private bool _loaded;
     private bool _disposed;
-    private bool _terminalInputHooked;
-    private bool _threadInputHooked;
-    private bool _shiftKeyDown;
-    private bool _controlKeyDown;
-    private bool _altKeyDown;
+    private bool _terminalMouseHooked;
     private readonly AlternateScreenTracker _alternateScreen = new();
     private int _wheelDeltaRemainder;
     private static readonly bool InputDiagnostics =
@@ -44,8 +39,6 @@ public partial class SshTerminalHost : System.Windows.Controls.UserControl, ITer
         InitializeComponent();
         MessageBody.Text = profile.DisplayEndpoint;
         Loaded += OnLoaded;
-        PreviewKeyDown += OnPreviewKeyDown;
-        PreviewKeyUp += OnPreviewKeyUp;
     }
 
     public event EventHandler<TerminalHostStateChangedEventArgs>? StateChanged;
@@ -130,7 +123,7 @@ public partial class SshTerminalHost : System.Windows.Controls.UserControl, ITer
                 Terminal.Visibility = System.Windows.Visibility.Visible;
                 Terminal.UpdateLayout();
                 _terminalContainer ??= FindVisualChild<TerminalContainer>(Terminal);
-                EnsureTerminalInputHook();
+                EnsureTerminalMouseHook();
                 Terminal.Connection = connection;
                 ApplyTheme();
                 connection.AttachRenderer();
@@ -220,7 +213,7 @@ public partial class SshTerminalHost : System.Windows.Controls.UserControl, ITer
         Terminal.Visibility = System.Windows.Visibility.Visible;
         Terminal.UpdateLayout();
         _terminalContainer ??= FindVisualChild<TerminalContainer>(Terminal);
-        EnsureTerminalInputHook();
+        EnsureTerminalMouseHook();
         Terminal.Connection = prompt;
         ApplyTheme();
         prompt.AttachRenderer();
@@ -301,238 +294,17 @@ public partial class SshTerminalHost : System.Windows.Controls.UserControl, ITer
             });
     }
 
-    private void EnsureTerminalInputHook()
+    private void EnsureTerminalMouseHook()
     {
-        if (_terminalInputHooked || _terminalContainer is null) return;
+        if (_terminalMouseHooked || _terminalContainer is null) return;
+
+        // TerminalContainer already delegates keyboard messages to Microsoft's
+        // VT input engine. Intercepting them here would lose application-cursor
+        // mode and can double-send keys to full-screen programs.
         _terminalContainer.MessageHook += TerminalContainerMessageHook;
-        _terminalInputHooked = true;
-        ComponentDispatcher.ThreadPreprocessMessage += OnThreadPreprocessMessage;
-        _threadInputHooked = true;
+        _terminalMouseHooked = true;
         if (InputDiagnostics)
-            DiagnosticLog.Write("TerminalInput", $"Native terminal input hook installed on HWND {_terminalContainer.Handle}.");
-    }
-
-    private void OnThreadPreprocessMessage(ref MSG message, ref bool handled)
-    {
-        try
-        {
-            if (_disposed || handled || !IsKeyboardMessage(message.message))
-            {
-                return;
-            }
-
-            var virtualKey = ExtractVirtualKey(message.wParam);
-            UpdateModifierKeyState(message.message, virtualKey);
-            if ((_connection is null && _passwordPrompt is null) || _terminalContainer is null ||
-                !OwnsNativeWindow(message.hwnd))
-            {
-                return;
-            }
-
-            if (TryGetKeyboardPasteAction(
-                    message.message,
-                    virtualKey,
-                    _shiftKeyDown || IsVirtualKeyDown(0x10),
-                    _controlKeyDown || IsVirtualKeyDown(0x11),
-                    _altKeyDown || IsVirtualKeyDown(0x12),
-                    out var pasteNow))
-            {
-                if (pasteNow)
-                {
-                    PasteClipboardText();
-                    if (InputDiagnostics)
-                    {
-                        DiagnosticLog.Write("TerminalInput", "Shift+Insert pasted clipboard text.");
-                    }
-                }
-                handled = true;
-                return;
-            }
-
-            if (_connection is null || HasNavigationModifier())
-            {
-                return;
-            }
-
-            if (TryTranslateNavigationMessage(message.message, virtualKey, out var sequence, out var write))
-            {
-                if (write && sequence is not null)
-                {
-                    _connection.WriteInput(sequence);
-                    if (InputDiagnostics)
-                    {
-                        DiagnosticLog.Write(
-                            "TerminalInput",
-                            $"Thread message forwarded virtual key 0x{virtualKey:X2} as {Convert.ToHexString(System.Text.Encoding.ASCII.GetBytes(sequence))}.");
-                    }
-                }
-                handled = true;
-            }
-        }
-        catch (Exception ex)
-        {
-            DiagnosticLog.Write("TerminalInput", ex);
-        }
-    }
-
-    private static bool IsKeyboardMessage(int message) =>
-        message is 0x0100 or 0x0101 or 0x0104 or 0x0105;
-
-    internal static int ExtractVirtualKey(IntPtr wParam) =>
-        unchecked((int)wParam.ToInt64()) & 0xFFFF;
-
-    private void OnPreviewKeyDown(object sender, KeyEventArgs e)
-    {
-        if (_disposed || e.Handled || (_connection is null && _passwordPrompt is null))
-        {
-            return;
-        }
-
-        var key = e.Key == Key.System ? e.SystemKey : e.Key;
-        UpdateWpfModifierKeyState(key, isDown: true);
-        if (IsShiftInsert(
-                key,
-                Keyboard.Modifiers,
-                _shiftKeyDown || IsVirtualKeyDown(0x10),
-                _controlKeyDown || IsVirtualKeyDown(0x11),
-                _altKeyDown || IsVirtualKeyDown(0x12)))
-        {
-            PasteClipboardText();
-            e.Handled = true;
-            return;
-        }
-
-        if (_connection is null || HasNavigationModifier())
-        {
-            return;
-        }
-
-        if (TranslateNavigationKey(key) is { } sequence)
-        {
-            _connection.WriteInput(sequence);
-            e.Handled = true;
-            if (InputDiagnostics)
-            {
-                DiagnosticLog.Write(
-                    "TerminalInput",
-                    $"WPF preview forwarded {key} as {Convert.ToHexString(System.Text.Encoding.ASCII.GetBytes(sequence))}.");
-            }
-        }
-    }
-
-    private void OnPreviewKeyUp(object sender, KeyEventArgs e)
-    {
-        var key = e.Key == Key.System ? e.SystemKey : e.Key;
-        UpdateWpfModifierKeyState(key, isDown: false);
-    }
-
-    private void UpdateWpfModifierKeyState(Key key, bool isDown)
-    {
-        switch (key)
-        {
-            case Key.LeftShift:
-            case Key.RightShift:
-                _shiftKeyDown = isDown;
-                break;
-            case Key.LeftCtrl:
-            case Key.RightCtrl:
-                _controlKeyDown = isDown;
-                break;
-            case Key.LeftAlt:
-            case Key.RightAlt:
-                _altKeyDown = isDown;
-                break;
-        }
-    }
-
-    private bool OwnsNativeWindow(IntPtr hwnd)
-    {
-        var terminalHandle = _terminalContainer?.Handle ?? IntPtr.Zero;
-        return terminalHandle != IntPtr.Zero &&
-               (hwnd == terminalHandle || IsChild(terminalHandle, hwnd));
-    }
-
-    private static bool HasNavigationModifier() =>
-        IsVirtualKeyDown(0x10) || IsVirtualKeyDown(0x11) || IsVirtualKeyDown(0x12);
-
-    private static bool IsVirtualKeyDown(int virtualKey) =>
-        (GetKeyState(virtualKey) & 0x8000) != 0 ||
-        (GetAsyncKeyState(virtualKey) & 0x8000) != 0;
-
-    private void UpdateModifierKeyState(int message, int virtualKey)
-    {
-        var isDown = message is 0x0100 or 0x0104;
-        var isUp = message is 0x0101 or 0x0105;
-        if (!isDown && !isUp)
-        {
-            return;
-        }
-
-        var value = isDown;
-        switch (virtualKey)
-        {
-            case 0x10:
-            case 0xA0:
-            case 0xA1:
-                _shiftKeyDown = value;
-                break;
-            case 0x11:
-            case 0xA2:
-            case 0xA3:
-                _controlKeyDown = value;
-                break;
-            case 0x12:
-            case 0xA4:
-            case 0xA5:
-                _altKeyDown = value;
-                break;
-        }
-    }
-
-    internal static bool IsShiftInsert(
-        Key key,
-        ModifierKeys modifiers,
-        bool trackedShift = false,
-        bool trackedControl = false,
-        bool trackedAlt = false) =>
-        key == Key.Insert &&
-        (modifiers == ModifierKeys.Shift ||
-         (trackedShift && !trackedControl && !trackedAlt));
-
-    internal static bool TryGetKeyboardPasteAction(
-        int message,
-        int virtualKey,
-        bool shiftPressed,
-        bool controlPressed,
-        bool altPressed,
-        out bool pasteNow)
-    {
-        const int WmKeyDown = 0x0100;
-        const int WmKeyUp = 0x0101;
-        const int VkInsert = 0x2D;
-        var isShortcut = virtualKey == VkInsert && shiftPressed && !controlPressed && !altPressed;
-        pasteNow = isShortcut && message == WmKeyDown;
-        return isShortcut && (message == WmKeyDown || message == WmKeyUp);
-    }
-
-    internal static bool TryTranslateNavigationMessage(
-        int message,
-        int virtualKey,
-        out string? sequence,
-        out bool write)
-    {
-        const int WmKeyDown = 0x0100;
-        const int WmKeyUp = 0x0101;
-        if (message != WmKeyDown && message != WmKeyUp)
-        {
-            sequence = null;
-            write = false;
-            return false;
-        }
-
-        sequence = TranslateNavigationKey(KeyInterop.KeyFromVirtualKey(virtualKey));
-        write = message == WmKeyDown && sequence is not null;
-        return sequence is not null;
+            DiagnosticLog.Write("TerminalInput", $"Terminal mouse hook installed on HWND {_terminalContainer.Handle}; keyboard input is owned by Microsoft Terminal.");
     }
 
     private IntPtr TerminalContainerMessageHook(
@@ -551,49 +323,6 @@ public partial class SshTerminalHost : System.Windows.Controls.UserControl, ITer
             return IntPtr.Zero;
         }
 
-        if (IsKeyboardMessage(message))
-        {
-            var virtualKey = ExtractVirtualKey(wParam);
-            UpdateModifierKeyState(message, virtualKey);
-            if (TryGetKeyboardPasteAction(
-                    message,
-                    virtualKey,
-                    _shiftKeyDown || IsVirtualKeyDown(0x10),
-                    _controlKeyDown || IsVirtualKeyDown(0x11),
-                    _altKeyDown || IsVirtualKeyDown(0x12),
-                    out var keyboardPasteNow))
-            {
-                handled = true;
-                if (keyboardPasteNow)
-                {
-                    PasteClipboardText();
-                    if (InputDiagnostics)
-                    {
-                        DiagnosticLog.Write("TerminalInput", "Native terminal hook handled Shift+Insert paste.");
-                    }
-                }
-                return IntPtr.Zero;
-            }
-
-            if (_connection is not null &&
-                !HasNavigationModifier() &&
-                TryTranslateNavigationMessage(message, virtualKey, out var sequence, out var write))
-            {
-                handled = true;
-                if (write && sequence is not null)
-                {
-                    _connection.WriteInput(sequence);
-                    if (InputDiagnostics)
-                    {
-                        DiagnosticLog.Write(
-                            "TerminalInput",
-                            $"Native terminal hook forwarded virtual key 0x{virtualKey:X2} as {Convert.ToHexString(System.Text.Encoding.ASCII.GetBytes(sequence))}.");
-                    }
-                }
-                return IntPtr.Zero;
-            }
-        }
-
         if (message == WmLeftButtonDown)
         {
             SetFocus(hwnd);
@@ -607,23 +336,24 @@ public partial class SshTerminalHost : System.Windows.Controls.UserControl, ITer
         }
 
         if (message == WmMouseWheel && _connection is not null &&
-            TryTranslateAlternateScreenWheelMessage(
+            TryGetAlternateScreenWheelNavigation(
                 message,
                 wParam,
                 _alternateScreen.IsActive,
-                HasNavigationModifier(),
+                HasModifierKey(),
                 ref _wheelDeltaRemainder,
-                out var wheelSequence))
+                out var virtualKey,
+                out var repeatCount))
         {
             handled = true;
-            if (!string.IsNullOrEmpty(wheelSequence))
+            if (repeatCount > 0)
             {
-                _connection.WriteInput(wheelSequence);
+                PostTerminalNavigationKey(hwnd, virtualKey, repeatCount);
                 if (InputDiagnostics)
                 {
                     DiagnosticLog.Write(
                         "TerminalInput",
-                        $"Alternate-screen wheel forwarded as {Convert.ToHexString(System.Text.Encoding.ASCII.GetBytes(wheelSequence))}.");
+                        $"Alternate-screen wheel posted {repeatCount} native key presses (VK 0x{virtualKey:X2}) to Microsoft Terminal.");
                 }
             }
             return IntPtr.Zero;
@@ -656,18 +386,20 @@ public partial class SshTerminalHost : System.Windows.Controls.UserControl, ITer
         return message is WmRightButtonDown or WmRightButtonUp or WmMiddleButtonDown or WmMiddleButtonUp;
     }
 
-    internal static bool TryTranslateAlternateScreenWheelMessage(
+    internal static bool TryGetAlternateScreenWheelNavigation(
         int message,
         IntPtr wParam,
         bool alternateScreen,
         bool hasModifier,
         ref int deltaRemainder,
-        out string? sequence)
+        out int virtualKey,
+        out int repeatCount)
     {
         const int WmMouseWheel = 0x020A;
         const int WheelDelta = 120;
         const int LinesPerDetent = 3;
-        sequence = null;
+        virtualKey = 0;
+        repeatCount = 0;
         if (message != WmMouseWheel || !alternateScreen || hasModifier)
         {
             deltaRemainder = 0;
@@ -682,13 +414,34 @@ public partial class SshTerminalHost : System.Windows.Controls.UserControl, ITer
             return true;
         }
 
-        var key = detents > 0 ? "\x1b[A" : "\x1b[B";
-        sequence = string.Concat(Enumerable.Repeat(key, Math.Min(Math.Abs(detents) * LinesPerDetent, 30)));
+        virtualKey = detents > 0 ? 0x26 : 0x28;
+        repeatCount = Math.Min(Math.Abs(detents) * LinesPerDetent, 30);
         return true;
     }
 
     internal static int ExtractWheelDelta(IntPtr wParam) =>
         unchecked((short)((wParam.ToInt64() >> 16) & 0xFFFF));
+
+    private static bool HasModifierKey() =>
+        (GetKeyState(0x10) & 0x8000) != 0 ||
+        (GetKeyState(0x11) & 0x8000) != 0 ||
+        (GetKeyState(0x12) & 0x8000) != 0;
+
+    private static void PostTerminalNavigationKey(IntPtr hwnd, int virtualKey, int repeatCount)
+    {
+        const int WmKeyDown = 0x0100;
+        const int WmKeyUp = 0x0101;
+        const uint MapVkToVsc = 0;
+        var scanCode = MapVirtualKey(unchecked((uint)virtualKey), MapVkToVsc) & 0xFF;
+        var keyDown = new IntPtr(1L | ((long)scanCode << 16) | (1L << 24));
+        var keyUp = new IntPtr(keyDown.ToInt64() | (1L << 30) | (1L << 31));
+
+        for (var index = 0; index < repeatCount; index++)
+        {
+            PostMessage(hwnd, WmKeyDown, new IntPtr(virtualKey), keyDown);
+            PostMessage(hwnd, WmKeyUp, new IntPtr(virtualKey), keyUp);
+        }
+    }
 
     private void CopySelectionToClipboard()
     {
@@ -744,22 +497,6 @@ public partial class SshTerminalHost : System.Windows.Controls.UserControl, ITer
 
     public void PasteClipboard() => PasteClipboardText();
 
-    internal static string? TranslateNavigationKey(Key key) => key switch
-    {
-        Key.Tab => "\t",
-        Key.Up => "\x1b[A",
-        Key.Down => "\x1b[B",
-        Key.Right => "\x1b[C",
-        Key.Left => "\x1b[D",
-        Key.Home => "\x1b[H",
-        Key.End => "\x1b[F",
-        Key.Insert => "\x1b[2~",
-        Key.Delete => "\x1b[3~",
-        Key.PageUp => "\x1b[5~",
-        Key.PageDown => "\x1b[6~",
-        _ => null,
-    };
-
     public void Dispose()
     {
         if (_disposed)
@@ -768,18 +505,11 @@ public partial class SshTerminalHost : System.Windows.Controls.UserControl, ITer
         }
 
         _disposed = true;
-        PreviewKeyDown -= OnPreviewKeyDown;
-        PreviewKeyUp -= OnPreviewKeyUp;
-        if (_threadInputHooked)
-        {
-            ComponentDispatcher.ThreadPreprocessMessage -= OnThreadPreprocessMessage;
-            _threadInputHooked = false;
-        }
-        if (_terminalInputHooked)
+        if (_terminalMouseHooked)
         {
             if (_terminalContainer is not null)
                 _terminalContainer.MessageHook -= TerminalContainerMessageHook;
-            _terminalInputHooked = false;
+            _terminalMouseHooked = false;
         }
         Terminal.Connection = null!;
         _passwordPrompt?.Dispose();
@@ -827,13 +557,13 @@ public partial class SshTerminalHost : System.Windows.Controls.UserControl, ITer
     private static extern IntPtr SetFocus(IntPtr hWnd);
 
     [DllImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool IsChild(IntPtr hWndParent, IntPtr hWnd);
-
-    [DllImport("user32.dll")]
     private static extern short GetKeyState(int virtualKey);
 
     [DllImport("user32.dll")]
-    private static extern short GetAsyncKeyState(int virtualKey);
+    private static extern uint MapVirtualKey(uint code, uint mapType);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool PostMessage(IntPtr hWnd, int message, IntPtr wParam, IntPtr lParam);
 
 }
