@@ -584,7 +584,7 @@ public partial class SshTerminalHost : System.Windows.Controls.UserControl, ITer
         try
         {
             var selectedText = Terminal.GetSelectedText();
-            if (!string.IsNullOrEmpty(selectedText))
+            if (ShouldCopySelection(selectedText))
             {
                 System.Windows.Clipboard.SetText(selectedText);
             }
@@ -594,6 +594,9 @@ public partial class SshTerminalHost : System.Windows.Controls.UserControl, ITer
             DiagnosticLog.Write("TerminalClipboard", $"Selection copy failed: {ex.Message}");
         }
     }
+
+    internal static bool ShouldCopySelection(string? selectedText) =>
+        !string.IsNullOrWhiteSpace(selectedText);
 
     private void PasteClipboardText()
     {

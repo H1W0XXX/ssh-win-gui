@@ -188,6 +188,18 @@ public sealed class SshTerminalConnectionTests
     }
 
     [Theory]
+    [InlineData(null, false)]
+    [InlineData("", false)]
+    [InlineData("   ", false)]
+    [InlineData("\t\r\n", false)]
+    [InlineData(" command ", true)]
+    [InlineData("中文", true)]
+    public void ClipboardAutoCopyIgnoresBlankSelections(string? selectedText, bool expected)
+    {
+        Assert.Equal(expected, SshTerminalHost.ShouldCopySelection(selectedText));
+    }
+
+    [Theory]
     [InlineData(120, 0x26, 1)]
     [InlineData(-120, 0x28, 1)]
     [InlineData(240, 0x26, 2)]
