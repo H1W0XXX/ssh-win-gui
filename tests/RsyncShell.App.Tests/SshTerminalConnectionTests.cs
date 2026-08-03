@@ -179,6 +179,92 @@ public sealed class SshTerminalConnectionTests
         Assert.Equal(expectedPaste, paste);
     }
 
+    [Fact]
+    public void AlternateScreenTrackerHandlesSplitEnterAndExitSequences()
+    {
+        var tracker = new AlternateScreenTracker();
+
+        tracker.Append("before\x1b[?10");
+        Assert.False(tracker.IsActive);
+        tracker.Append("49hinside");
+        Assert.True(tracker.IsActive);
+        tracker.Append("\x1b[?1049lafter");
+        Assert.False(tracker.IsActive);
+    }
+
+    [Theory]
+    [InlineData("\x1b[?47h", true)]
+    [InlineData("\x1b[?1047h", true)]
+    [InlineData("\x1b[?1;1049h", true)]
+    [InlineData("\x1b[?1049h\x1b[?1049l", false)]
+    public void AlternateScreenTrackerRecognizesSupportedModes(string output, bool expected)
+    {
+        var tracker = new AlternateScreenTracker();
+
+        tracker.Append(output);
+
+        Assert.Equal(expected, tracker.IsActive);
+    }
+
+    [Theory]
+    [InlineData(120, "\x1b[A\x1b[A\x1b[A")]
+    [InlineData(-120, "\x1b[B\x1b[B\x1b[B")]
+    [InlineData(240, "\x1b[A\x1b[A\x1b[A\x1b[A\x1b[A\x1b[A")]
+    public void AlternateScreenWheelProducesThreeCursorKeysPerDetent(int delta, string expected)
+    {
+        var remainder = 0;
+
+        var handled = SshTerminalHost.TryTranslateAlternateScreenWheelMessage(
+            0x020A,
+            WheelWParam(delta),
+            alternateScreen: true,
+            hasModifier: false,
+            ref remainder,
+            out var sequence);
+
+        Assert.True(handled);
+        Assert.Equal(expected, sequence);
+        Assert.Equal(0, remainder);
+    }
+
+    [Fact]
+    public void AlternateScreenWheelAccumulatesPrecisionWheelDeltas()
+    {
+        var remainder = 0;
+
+        Assert.True(SshTerminalHost.TryTranslateAlternateScreenWheelMessage(
+            0x020A, WheelWParam(60), true, false, ref remainder, out var first));
+        Assert.Null(first);
+        Assert.Equal(60, remainder);
+        Assert.True(SshTerminalHost.TryTranslateAlternateScreenWheelMessage(
+            0x020A, WheelWParam(60), true, false, ref remainder, out var second));
+        Assert.Equal("\x1b[A\x1b[A\x1b[A", second);
+        Assert.Equal(0, remainder);
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, true)]
+    public void WheelRemainsNativeOutsideEligibleAlternateScreen(bool alternateScreen, bool hasModifier)
+    {
+        var remainder = 60;
+
+        var handled = SshTerminalHost.TryTranslateAlternateScreenWheelMessage(
+            0x020A,
+            WheelWParam(120),
+            alternateScreen,
+            hasModifier,
+            ref remainder,
+            out var sequence);
+
+        Assert.False(handled);
+        Assert.Null(sequence);
+        Assert.Equal(0, remainder);
+    }
+
+    private static IntPtr WheelWParam(int delta) =>
+        new(unchecked((long)(ushort)(short)delta << 16));
+
     private sealed class RecordingStream : MemoryStream
     {
         public int FlushCount { get; private set; }

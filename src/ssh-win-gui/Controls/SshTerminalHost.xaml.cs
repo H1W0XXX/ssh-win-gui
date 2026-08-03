@@ -26,6 +26,8 @@ public partial class SshTerminalHost : System.Windows.Controls.UserControl, ITer
     private bool _shiftKeyDown;
     private bool _controlKeyDown;
     private bool _altKeyDown;
+    private readonly AlternateScreenTracker _alternateScreen = new();
+    private int _wheelDeltaRemainder;
     private static readonly bool InputDiagnostics =
         string.Equals(Environment.GetEnvironmentVariable("SSH_WIN_GUI_INPUT_DIAGNOSTICS"), "1", StringComparison.Ordinal);
 
@@ -82,7 +84,7 @@ public partial class SshTerminalHost : System.Windows.Controls.UserControl, ITer
         Terminal.Connection = null!;
         _passwordPrompt?.Dispose();
         _passwordPrompt = null;
-        _connection?.Dispose();
+        DisposeActiveConnection();
         MessagePanel.Visibility = System.Windows.Visibility.Visible;
         StartProgress.Visibility = System.Windows.Visibility.Visible;
         RetryButton.Visibility = System.Windows.Visibility.Collapsed;
@@ -97,7 +99,22 @@ public partial class SshTerminalHost : System.Windows.Controls.UserControl, ITer
             _route,
             Dispatcher);
         _connection.StateChanged += Connection_OnStateChanged;
+        _connection.TerminalOutput += Connection_OnTerminalOutput;
         _connection.Start();
+    }
+
+    private void Connection_OnTerminalOutput(object? sender, TerminalOutputEventArgs e)
+    {
+        if (sender is not SshTerminalConnection connection || !ReferenceEquals(connection, _connection))
+        {
+            return;
+        }
+
+        _alternateScreen.Append(e.Data);
+        if (!_alternateScreen.IsActive)
+        {
+            _wheelDeltaRemainder = 0;
+        }
     }
 
     private void Connection_OnStateChanged(object? sender, TerminalHostStateChangedEventArgs e)
@@ -181,8 +198,7 @@ public partial class SshTerminalHost : System.Windows.Controls.UserControl, ITer
         }
 
         Terminal.Connection = null!;
-        _connection?.Dispose();
-        _connection = null;
+        DisposeActiveConnection();
         _passwordPrompt?.Dispose();
 
         var output = new System.Text.StringBuilder();
@@ -528,6 +544,7 @@ public partial class SshTerminalHost : System.Windows.Controls.UserControl, ITer
     {
         const int WmLeftButtonDown = 0x0201;
         const int WmLeftButtonUp = 0x0202;
+        const int WmMouseWheel = 0x020A;
 
         if (_disposed || _terminalContainer is null || hwnd != _terminalContainer.Handle)
         {
@@ -589,6 +606,29 @@ public partial class SshTerminalHost : System.Windows.Controls.UserControl, ITer
             return IntPtr.Zero;
         }
 
+        if (message == WmMouseWheel && _connection is not null &&
+            TryTranslateAlternateScreenWheelMessage(
+                message,
+                wParam,
+                _alternateScreen.IsActive,
+                HasNavigationModifier(),
+                ref _wheelDeltaRemainder,
+                out var wheelSequence))
+        {
+            handled = true;
+            if (!string.IsNullOrEmpty(wheelSequence))
+            {
+                _connection.WriteInput(wheelSequence);
+                if (InputDiagnostics)
+                {
+                    DiagnosticLog.Write(
+                        "TerminalInput",
+                        $"Alternate-screen wheel forwarded as {Convert.ToHexString(System.Text.Encoding.ASCII.GetBytes(wheelSequence))}.");
+                }
+            }
+            return IntPtr.Zero;
+        }
+
         if (TryGetPasteMouseAction(message, LocalizationService.MousePasteButton, out var pasteNow))
         {
             handled = true;
@@ -615,6 +655,40 @@ public partial class SshTerminalHost : System.Windows.Controls.UserControl, ITer
         pasteNow = message == upMessage;
         return message is WmRightButtonDown or WmRightButtonUp or WmMiddleButtonDown or WmMiddleButtonUp;
     }
+
+    internal static bool TryTranslateAlternateScreenWheelMessage(
+        int message,
+        IntPtr wParam,
+        bool alternateScreen,
+        bool hasModifier,
+        ref int deltaRemainder,
+        out string? sequence)
+    {
+        const int WmMouseWheel = 0x020A;
+        const int WheelDelta = 120;
+        const int LinesPerDetent = 3;
+        sequence = null;
+        if (message != WmMouseWheel || !alternateScreen || hasModifier)
+        {
+            deltaRemainder = 0;
+            return false;
+        }
+
+        deltaRemainder += ExtractWheelDelta(wParam);
+        var detents = deltaRemainder / WheelDelta;
+        deltaRemainder -= detents * WheelDelta;
+        if (detents == 0)
+        {
+            return true;
+        }
+
+        var key = detents > 0 ? "\x1b[A" : "\x1b[B";
+        sequence = string.Concat(Enumerable.Repeat(key, Math.Min(Math.Abs(detents) * LinesPerDetent, 30)));
+        return true;
+    }
+
+    internal static int ExtractWheelDelta(IntPtr wParam) =>
+        unchecked((short)((wParam.ToInt64() >> 16) & 0xFFFF));
 
     private void CopySelectionToClipboard()
     {
@@ -710,10 +784,22 @@ public partial class SshTerminalHost : System.Windows.Controls.UserControl, ITer
         Terminal.Connection = null!;
         _passwordPrompt?.Dispose();
         _passwordPrompt = null;
-        _connection?.Dispose();
-        _connection = null;
+        DisposeActiveConnection();
         (_terminalContainer ?? FindVisualChild<TerminalContainer>(Terminal))?.Dispose();
         _terminalContainer = null;
+    }
+
+    private void DisposeActiveConnection()
+    {
+        if (_connection is not null)
+        {
+            _connection.StateChanged -= Connection_OnStateChanged;
+            _connection.TerminalOutput -= Connection_OnTerminalOutput;
+            _connection.Dispose();
+            _connection = null;
+        }
+        _alternateScreen.Reset();
+        _wheelDeltaRemainder = 0;
     }
 
     private static T? FindVisualChild<T>(System.Windows.DependencyObject root)
