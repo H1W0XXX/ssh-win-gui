@@ -12,8 +12,6 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
-Add-Type -AssemblyName UIAutomationClient
-Add-Type -AssemblyName UIAutomationTypes
 Add-Type @'
 using System;
 using System.Text;
@@ -91,21 +89,11 @@ $env:SSH_WIN_GUI_INPUT_DIAGNOSTICS = "1"
 try {
     Invoke-RemoteCommand -Command "rm -f -- '$marker'" | Out-Null
     $resolvedApplication = (Resolve-Path -LiteralPath $ApplicationPath).Path
-    $process = Start-Process -FilePath $resolvedApplication -WorkingDirectory (Split-Path -Parent $resolvedApplication) -PassThru
+    $process = Start-Process -FilePath $resolvedApplication `
+        -ArgumentList @("$UserName@$HostName`:$Port") `
+        -WorkingDirectory (Split-Path -Parent $resolvedApplication) -PassThru
     if (-not $process.WaitForInputIdle(15000)) { throw "Application did not become input-idle." }
     $process.Refresh()
-
-    $root = [Windows.Automation.AutomationElement]::FromHandle($process.MainWindowHandle)
-    $condition = [Windows.Automation.PropertyCondition]::new(
-        [Windows.Automation.AutomationElement]::AutomationIdProperty,
-        "QuickConnectBox")
-    $quickConnect = $root.FindFirst([Windows.Automation.TreeScope]::Descendants, $condition)
-    if ($null -eq $quickConnect) { throw "QuickConnectBox was not found." }
-    $valuePattern = [Windows.Automation.ValuePattern]$quickConnect.GetCurrentPattern([Windows.Automation.ValuePattern]::Pattern)
-    $valuePattern.SetValue("$UserName@$HostName`:$Port")
-    $quickConnect.SetFocus()
-    [TerminalNavigationSmokeNative]::PostMessage($process.MainWindowHandle, 0x0100, [IntPtr]13, [IntPtr]0x001C0001) | Out-Null
-    [TerminalNavigationSmokeNative]::PostMessage($process.MainWindowHandle, 0x0101, [IntPtr]13, [IntPtr]0xC01C0001) | Out-Null
 
     $deadline = (Get-Date).AddSeconds(20)
     do {

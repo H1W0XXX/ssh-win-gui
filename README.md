@@ -1,8 +1,8 @@
 # ssh-win-gui
 
 ssh-win-gui is a new Windows-native SSH workspace with the compact workflow that
-makes MobaXterm useful: quick connect, saved sessions, terminal tabs, a remote
-browser beside the active shell, and a visible transfer queue. It has its own
+makes MobaXterm useful: saved sessions, terminal tabs, a remote browser beside
+the active shell, and a visible transfer queue. It has its own
 name, implementation and assets; it does not patch or redistribute MobaXterm.
 
 Saved sessions can be created, edited, grouped, favorited and deleted. Endpoint

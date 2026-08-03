@@ -126,7 +126,6 @@ public partial class MainWindow : Window
             UpdateLanguageMenu();
             UpdateMousePasteMenu();
             UpdateKeywordHighlightingMenu();
-            QuickConnectBox.Focus();
             _initialization.TrySetResult();
         }
     }
@@ -179,17 +178,6 @@ public partial class MainWindow : Window
         UpdateSessionCommands();
     }
 
-    private async void QuickConnectBox_OnKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
-    {
-        if (e.Key != Key.Enter)
-        {
-            return;
-        }
-
-        e.Handled = true;
-        await OpenQuickConnectAsync(QuickConnectBox.Text);
-    }
-
     public async Task OpenQuickConnectAsync(string endpoint)
     {
         await _initialization.Task;
@@ -200,10 +188,6 @@ public partial class MainWindow : Window
                 out var error) || parsed is null)
         {
             SetConnectionStatus(LocalizationService.TranslateProfileError(error), isError: true);
-            if (error.StartsWith("Inline SSH passwords", StringComparison.Ordinal))
-            {
-                QuickConnectBox.Clear();
-            }
             return;
         }
 
@@ -213,7 +197,6 @@ public partial class MainWindow : Window
             string.Equals(existing.Username, parsed.Username, StringComparison.OrdinalIgnoreCase));
         profile ??= parsed with { Name = parsed.DisplayEndpoint };
 
-        QuickConnectBox.Clear();
         await OpenTerminalAsync(profile);
     }
 
@@ -1810,12 +1793,6 @@ public partial class MainWindow : Window
             LocalizationService.Get("AboutRsyncShell"),
             MessageBoxButton.OK,
             MessageBoxImage.Information);
-
-    private void AddTabButton_OnClick(object sender, RoutedEventArgs e)
-    {
-        QuickConnectBox.Focus();
-        QuickConnectBox.SelectAll();
-    }
 
     private void SetConnectionStatus(string message, bool isError = false)
     {

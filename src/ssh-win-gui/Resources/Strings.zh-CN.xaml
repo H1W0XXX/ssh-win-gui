@@ -7,7 +7,6 @@
     <sys:String x:Key="Exit">退出</sys:String>
     <sys:String x:Key="MenuSessions">会话</sys:String>
     <sys:String x:Key="SavedSessions">已保存会话</sys:String>
-    <sys:String x:Key="FocusQuickConnect">定位到快速连接</sys:String>
     <sys:String x:Key="MenuView">视图</sys:String>
     <sys:String x:Key="SessionsPanel">会话面板</sys:String>
     <sys:String x:Key="RemoteFiles">远程文件</sys:String>
@@ -65,9 +64,7 @@
     <sys:String x:Key="TipTransferActivity">查看 rsync 传输活动</sys:String>
     <sys:String x:Key="TipAbout">关于 ssh-win-gui</sys:String>
     <sys:String x:Key="TipExit">退出 ssh-win-gui</sys:String>
-    <sys:String x:Key="QuickConnect">快速连接...</sys:String>
     <sys:String x:Key="Home">主页</sys:String>
-    <sys:String x:Key="TipNewTab">新建 SSH 标签</sys:String>
     <sys:String x:Key="TipSessions">会话</sys:String>
     <sys:String x:Key="TipSshBrowser">SSH 文件浏览器</sys:String>
     <sys:String x:Key="TipRsyncTransfers">Rsync 传输</sys:String>
@@ -93,8 +90,6 @@
     <sys:String x:Key="RsyncTransfersUpper">RSYNC 传输</sys:String>
     <sys:String x:Key="Cancel">取消</sys:String>
     <sys:String x:Key="HomeSubtitle">SSH 终端与 rsync 文件工作区</sys:String>
-    <sys:String x:Key="OpenSshSession">打开 SSH 会话</sys:String>
-    <sys:String x:Key="HomeInstructions">在快速连接中输入 user@host:port 并按回车。左侧文件列表通过 SSH 获取，上传和下载使用 rsync。</sys:String>
     <sys:String x:Key="Ready">就绪</sys:String>
     <sys:String x:Key="Local">本地</sys:String>
     <sys:String x:Key="FooterSummary">ssh-win-gui  ·  SSH 终端  ·  rsync 文件传输</sys:String>

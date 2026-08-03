@@ -7,7 +7,6 @@
     <sys:String x:Key="Exit">Exit</sys:String>
     <sys:String x:Key="MenuSessions">Sessions</sys:String>
     <sys:String x:Key="SavedSessions">Saved sessions</sys:String>
-    <sys:String x:Key="FocusQuickConnect">Focus quick connect</sys:String>
     <sys:String x:Key="MenuView">View</sys:String>
     <sys:String x:Key="SessionsPanel">Sessions panel</sys:String>
     <sys:String x:Key="RemoteFiles">Remote files</sys:String>
@@ -65,9 +64,7 @@
     <sys:String x:Key="TipTransferActivity">Show rsync transfer activity</sys:String>
     <sys:String x:Key="TipAbout">About ssh-win-gui</sys:String>
     <sys:String x:Key="TipExit">Exit ssh-win-gui</sys:String>
-    <sys:String x:Key="QuickConnect">Quick connect...</sys:String>
     <sys:String x:Key="Home">Home</sys:String>
-    <sys:String x:Key="TipNewTab">New SSH tab</sys:String>
     <sys:String x:Key="TipSessions">Sessions</sys:String>
     <sys:String x:Key="TipSshBrowser">SSH browser</sys:String>
     <sys:String x:Key="TipRsyncTransfers">Rsync transfers</sys:String>
@@ -93,8 +90,6 @@
     <sys:String x:Key="RsyncTransfersUpper">RSYNC TRANSFERS</sys:String>
     <sys:String x:Key="Cancel">Cancel</sys:String>
     <sys:String x:Key="HomeSubtitle">SSH terminal and rsync file workspace</sys:String>
-    <sys:String x:Key="OpenSshSession">Open an SSH session</sys:String>
-    <sys:String x:Key="HomeInstructions">Enter user@host:port in Quick connect and press Enter. The left file browser uses SSH for listings; upload and download use rsync.</sys:String>
     <sys:String x:Key="Ready">Ready</sys:String>
     <sys:String x:Key="Local">Local</sys:String>
     <sys:String x:Key="FooterSummary">ssh-win-gui  ·  SSH terminal  ·  rsync file transfer</sys:String>

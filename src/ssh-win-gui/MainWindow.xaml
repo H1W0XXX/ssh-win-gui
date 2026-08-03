@@ -42,7 +42,6 @@
                 <MenuItem x:Name="DeleteSessionMenuItem" Header="{DynamicResource Delete}" IsEnabled="False" Click="DeleteSessionButton_OnClick" />
                 <Separator />
                 <MenuItem Header="{DynamicResource SavedSessions}" Click="SessionsRailButton_OnClick" />
-                <MenuItem Header="{DynamicResource FocusQuickConnect}" Click="AddTabButton_OnClick" />
             </MenuItem>
             <MenuItem Header="{DynamicResource MenuView}">
                 <MenuItem Header="{DynamicResource SessionsPanel}" Click="SessionsRailButton_OnClick" />
@@ -102,36 +101,6 @@
             </StackPanel>
         </Border>
 
-        <Border Grid.Row="2" Grid.Column="0"
-                Background="White"
-                BorderBrush="{StaticResource ChromeBorderBrush}"
-                BorderThickness="0,0,1,1"
-                Padding="7,5">
-            <Grid>
-                <TextBox x:Name="QuickConnectBox"
-                         Padding="8,3"
-                         VerticalContentAlignment="Center"
-                         ToolTip="user@host:port or ssh://user@host:port"
-                         KeyDown="QuickConnectBox_OnKeyDown" />
-                <TextBlock Text="{DynamicResource QuickConnect}"
-                           Margin="10,0,0,0"
-                           Foreground="#8A929B"
-                           VerticalAlignment="Center"
-                           IsHitTestVisible="False">
-                    <TextBlock.Style>
-                        <Style TargetType="TextBlock">
-                            <Setter Property="Visibility" Value="Collapsed" />
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding Text, ElementName=QuickConnectBox}" Value="">
-                                    <Setter Property="Visibility" Value="Visible" />
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </TextBlock.Style>
-                </TextBlock>
-            </Grid>
-        </Border>
-
         <Border Grid.Row="2" Grid.Column="2"
                 Background="{StaticResource ChromeBrush}"
                 BorderBrush="{StaticResource ChromeBorderBrush}"
@@ -155,8 +124,8 @@
                                 Style="{StaticResource ToolbarButton}"
                                 FontSize="18"
                                 Content="＋"
-                                ToolTip="{DynamicResource TipNewTab}"
-                                Click="AddTabButton_OnClick" />
+                                ToolTip="{DynamicResource NewSshSession}"
+                                Click="NewSessionButton_OnClick" />
                     </StackPanel>
                 </ScrollViewer>
         </Border>
@@ -168,7 +137,7 @@
                       Background="#D8DCE1"
                       ResizeBehavior="PreviousAndNext" />
 
-        <Border Grid.Row="3" Grid.Column="0"
+        <Border Grid.Row="2" Grid.RowSpan="2" Grid.Column="0"
                 Background="White"
                 BorderBrush="{StaticResource ChromeBorderBrush}"
                 BorderThickness="0,0,1,0">
@@ -421,36 +390,14 @@
             </Grid.RowDefinitions>
             <Grid x:Name="TerminalStage">
                 <Grid x:Name="HomeView" Background="#F4F5F7">
-                    <Grid Width="690" HorizontalAlignment="Center" VerticalAlignment="Center">
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
-                        </Grid.RowDefinitions>
-                        <StackPanel HorizontalAlignment="Center" Margin="0,0,0,24">
-                            <TextBlock Text="ssh-win-gui" Foreground="#263646" FontSize="32" FontWeight="SemiBold" HorizontalAlignment="Center" />
-                            <TextBlock Text="{DynamicResource HomeSubtitle}"
-                                       Foreground="#697887"
-                                       FontSize="15"
-                                       Margin="0,6,0,0"
-                                       HorizontalAlignment="Center" />
-                        </StackPanel>
-                        <Border Grid.Row="1" BorderBrush="#CCD2D8" BorderThickness="1" Background="White" Padding="20,17">
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto" />
-                                    <ColumnDefinition Width="*" />
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Text="&#xE756;" FontFamily="Segoe MDL2 Assets" FontSize="34" Foreground="#1678C5" Margin="0,0,17,0" VerticalAlignment="Top" />
-                                <StackPanel Grid.Column="1">
-                                    <TextBlock Text="{DynamicResource OpenSshSession}" Foreground="#263646" FontSize="17" FontWeight="SemiBold" />
-                                    <TextBlock Text="{DynamicResource HomeInstructions}"
-                                               Foreground="#617182"
-                                               Margin="0,7,0,0"
-                                               TextWrapping="Wrap" />
-                                </StackPanel>
-                            </Grid>
-                        </Border>
-                    </Grid>
+                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <TextBlock Text="ssh-win-gui" Foreground="#263646" FontSize="32" FontWeight="SemiBold" HorizontalAlignment="Center" />
+                        <TextBlock Text="{DynamicResource HomeSubtitle}"
+                                   Foreground="#697887"
+                                   FontSize="15"
+                                   Margin="0,6,0,0"
+                                   HorizontalAlignment="Center" />
+                    </StackPanel>
                 </Grid>
             </Grid>
             <Border x:Name="RemoteMonitoringPanel"
