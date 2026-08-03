@@ -292,9 +292,20 @@ public partial class MainWindow : Window
         UpdateSessionCommands();
     }
 
-    private void SessionTreeItem_OnPreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
+    private void SessionTree_OnPreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
     {
-        if (sender is not TreeViewItem item) return;
+        if (e.ChangedButton != MouseButton.Right)
+        {
+            return;
+        }
+
+        var item = FindSessionTreeItemAt(e.GetPosition(SessionTree));
+        if (item is null)
+        {
+            e.Handled = true;
+            return;
+        }
+
         item.IsSelected = true;
         item.Focus();
         if (item.Tag is not ConnectionProfile || SessionTree.ContextMenu is null)
@@ -306,9 +317,6 @@ public partial class MainWindow : Window
             e.Handled = true;
             return;
         }
-        SessionTree.ContextMenu.PlacementTarget = item;
-        SessionTree.ContextMenu.IsOpen = true;
-        e.Handled = true;
     }
 
     private void SessionTree_OnContextMenuOpening(object sender, ContextMenuEventArgs e)

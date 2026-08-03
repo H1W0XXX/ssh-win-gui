@@ -221,6 +221,7 @@
                                   FontSize="13"
                                   HorizontalContentAlignment="Stretch"
                                   PreviewMouseLeftButtonDown="SessionTree_OnPreviewMouseLeftButtonDown"
+                                  PreviewMouseRightButtonDown="SessionTree_OnPreviewMouseRightButtonDown"
                                   ContextMenuOpening="SessionTree_OnContextMenuOpening"
                                   SelectedItemChanged="SessionTree_OnSelectedItemChanged">
                             <TreeView.Resources>
@@ -240,8 +241,6 @@
                                             </DataTemplate>
                                         </Setter.Value>
                                     </Setter>
-                                    <EventSetter Event="PreviewMouseRightButtonDown"
-                                                 Handler="SessionTreeItem_OnPreviewMouseRightButtonDown" />
                                 </Style>
                             </TreeView.Resources>
                             <TreeView.ContextMenu>

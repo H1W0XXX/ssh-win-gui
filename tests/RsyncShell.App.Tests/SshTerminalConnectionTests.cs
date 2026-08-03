@@ -53,6 +53,7 @@ public sealed class SshTerminalConnectionTests
     }
 
     [Theory]
+    [InlineData(Key.Tab, "\t")]
     [InlineData(Key.Up, "\x1b[A")]
     [InlineData(Key.Down, "\x1b[B")]
     [InlineData(Key.Left, "\x1b[D")]
@@ -66,6 +67,8 @@ public sealed class SshTerminalConnectionTests
     }
 
     [Theory]
+    [InlineData(0x0100, 0x09, true, true, "\t")]
+    [InlineData(0x0101, 0x09, true, false, "\t")]
     [InlineData(0x0100, 0x26, true, true, "\x1b[A")]
     [InlineData(0x0101, 0x26, true, false, "\x1b[A")]
     [InlineData(0x0100, 0x28, true, true, "\x1b[B")]

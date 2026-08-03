@@ -654,6 +654,7 @@ public partial class SshTerminalHost : System.Windows.Controls.UserControl, ITer
 
     internal static string? TranslateNavigationKey(Key key) => key switch
     {
+        Key.Tab => "\t",
         Key.Up => "\x1b[A",
         Key.Down => "\x1b[B",
         Key.Right => "\x1b[C",
