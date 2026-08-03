@@ -557,6 +557,24 @@ public partial class SshTerminalHost : System.Windows.Controls.UserControl, ITer
                 }
                 return IntPtr.Zero;
             }
+
+            if (_connection is not null &&
+                !HasNavigationModifier() &&
+                TryTranslateNavigationMessage(message, virtualKey, out var sequence, out var write))
+            {
+                handled = true;
+                if (write && sequence is not null)
+                {
+                    _connection.WriteInput(sequence);
+                    if (InputDiagnostics)
+                    {
+                        DiagnosticLog.Write(
+                            "TerminalInput",
+                            $"Native terminal hook forwarded virtual key 0x{virtualKey:X2} as {Convert.ToHexString(System.Text.Encoding.ASCII.GetBytes(sequence))}.");
+                    }
+                }
+                return IntPtr.Zero;
+            }
         }
 
         if (message == WmLeftButtonDown)

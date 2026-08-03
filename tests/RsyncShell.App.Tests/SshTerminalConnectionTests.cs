@@ -60,6 +60,8 @@ public sealed class SshTerminalConnectionTests
     [InlineData(Key.Right, "\x1b[C")]
     [InlineData(Key.Home, "\x1b[H")]
     [InlineData(Key.End, "\x1b[F")]
+    [InlineData(Key.PageUp, "\x1b[5~")]
+    [InlineData(Key.PageDown, "\x1b[6~")]
     [InlineData(Key.Delete, "\x1b[3~")]
     public void NavigationKeysUseCanonicalXtermSequences(Key key, string expected)
     {
@@ -72,6 +74,10 @@ public sealed class SshTerminalConnectionTests
     [InlineData(0x0100, 0x26, true, true, "\x1b[A")]
     [InlineData(0x0101, 0x26, true, false, "\x1b[A")]
     [InlineData(0x0100, 0x28, true, true, "\x1b[B")]
+    [InlineData(0x0100, 0x21, true, true, "\x1b[5~")]
+    [InlineData(0x0101, 0x21, true, false, "\x1b[5~")]
+    [InlineData(0x0100, 0x22, true, true, "\x1b[6~")]
+    [InlineData(0x0101, 0x22, true, false, "\x1b[6~")]
     [InlineData(0x0102, 0x26, false, false, null)]
     [InlineData(0x0100, 0x41, false, false, null)]
     public void ThreadKeyboardMessagesConsumeNavigationBeforeNativeDispatch(
