@@ -10,10 +10,12 @@ corrupted. PTY size changes flow back through `ChangeWindowSize`.
 Keyboard messages are translated by Microsoft's native Terminal control, which
 tracks application-cursor and other VT keyboard modes used by `vi`, `less` and
 `tmux`. The application does not replace arrow, navigation or paging keys with
-hard-coded escape strings. Its terminal HWND hook is limited to clipboard mouse
-actions and alternate-screen mouse-wheel adaptation; wheel detents are posted
-back as native cursor-key messages so the same Terminal input engine still owns
-VT key encoding.
+hard-coded escape strings. WPF attempts to use arrow and tab keys for focus
+traversal, so the host consumes only that routed action and sends the original
+Win32 virtual-key message back to Terminal's HWND. Its terminal HWND hook is
+otherwise limited to clipboard mouse actions and alternate-screen mouse-wheel
+adaptation; wheel detents are also sent back as native cursor-key messages so
+the same Terminal input engine still owns VT key encoding.
 Every queued input chunk is explicitly flushed after `ShellStream.WriteAsync`;
 SSH.NET otherwise keeps short interactive writes in its internal stream buffer
 instead of sending them to the SSH channel. A regression test covers UTF-8 input

@@ -1,6 +1,7 @@
 using System.Text;
 using RsyncShell.App.Controls;
 using RsyncShell.App.Services;
+using System.Windows.Input;
 
 namespace RsyncShell.App.Tests;
 
@@ -49,6 +50,29 @@ public sealed class SshTerminalConnectionTests
         prompt.WriteInput("ok\r");
 
         Assert.Equal(1, submissions);
+    }
+
+    [Theory]
+    [InlineData(Key.Tab, ModifierKeys.None, true)]
+    [InlineData(Key.Up, ModifierKeys.None, true)]
+    [InlineData(Key.Down, ModifierKeys.None, true)]
+    [InlineData(Key.Left, ModifierKeys.Control, true)]
+    [InlineData(Key.Right, ModifierKeys.Alt, true)]
+    [InlineData(Key.Home, ModifierKeys.None, true)]
+    [InlineData(Key.End, ModifierKeys.None, true)]
+    [InlineData(Key.PageUp, ModifierKeys.None, true)]
+    [InlineData(Key.PageDown, ModifierKeys.None, true)]
+    [InlineData(Key.Delete, ModifierKeys.None, true)]
+    [InlineData(Key.Insert, ModifierKeys.None, true)]
+    [InlineData(Key.Insert, ModifierKeys.Shift, false)]
+    [InlineData(Key.A, ModifierKeys.None, false)]
+    [InlineData(Key.Enter, ModifierKeys.None, false)]
+    public void WpfFocusNavigationKeysAreForwardedAsNativeKeys(
+        Key key,
+        ModifierKeys modifiers,
+        bool expected)
+    {
+        Assert.Equal(expected, SshTerminalHost.ShouldForwardNativeNavigationKey(key, modifiers));
     }
 
     [Theory]

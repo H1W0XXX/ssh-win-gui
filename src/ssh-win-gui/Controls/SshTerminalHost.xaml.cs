@@ -39,6 +39,7 @@ public partial class SshTerminalHost : System.Windows.Controls.UserControl, ITer
         InitializeComponent();
         MessageBody.Text = profile.DisplayEndpoint;
         Loaded += OnLoaded;
+        PreviewKeyDown += OnPreviewKeyDown;
     }
 
     public event EventHandler<TerminalHostStateChangedEventArgs>? StateChanged;
@@ -307,6 +308,46 @@ public partial class SshTerminalHost : System.Windows.Controls.UserControl, ITer
             DiagnosticLog.Write("TerminalInput", $"Terminal mouse hook installed on HWND {_terminalContainer.Handle}; keyboard input is owned by Microsoft Terminal.");
     }
 
+    private void OnPreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (_disposed || e.Handled || (_connection is null && _passwordPrompt is null) ||
+            Terminal.Visibility != System.Windows.Visibility.Visible || _terminalContainer is null)
+        {
+            return;
+        }
+
+        var key = e.Key == Key.System ? e.SystemKey : e.Key;
+        if (!ShouldForwardNativeNavigationKey(key, Keyboard.Modifiers))
+        {
+            return;
+        }
+
+        var virtualKey = KeyInterop.VirtualKeyFromKey(key);
+        if (virtualKey == 0 || _terminalContainer.Handle == IntPtr.Zero)
+        {
+            return;
+        }
+
+        // WPF treats the arrow and tab keys as focus traversal. Consume that
+        // routed action and replay the original native key into Terminal's HWND;
+        // Microsoft Terminal still owns application-mode and VT encoding.
+        SetFocus(_terminalContainer.Handle);
+        SendTerminalKey(_terminalContainer.Handle, virtualKey, 1);
+        e.Handled = true;
+    }
+
+    internal static bool ShouldForwardNativeNavigationKey(Key key, ModifierKeys modifiers) =>
+        key switch
+        {
+            Key.Tab => true,
+            Key.Up or Key.Down or Key.Left or Key.Right => true,
+            Key.Home or Key.End => true,
+            Key.PageUp or Key.PageDown => true,
+            Key.Delete => true,
+            Key.Insert => (modifiers & ModifierKeys.Shift) == 0,
+            _ => false,
+        };
+
     private IntPtr TerminalContainerMessageHook(
         IntPtr hwnd,
         int message,
@@ -348,12 +389,12 @@ public partial class SshTerminalHost : System.Windows.Controls.UserControl, ITer
             handled = true;
             if (repeatCount > 0)
             {
-                PostTerminalNavigationKey(hwnd, virtualKey, repeatCount);
+                SendTerminalKey(hwnd, virtualKey, repeatCount);
                 if (InputDiagnostics)
                 {
                     DiagnosticLog.Write(
                         "TerminalInput",
-                        $"Alternate-screen wheel posted {repeatCount} native key presses (VK 0x{virtualKey:X2}) to Microsoft Terminal.");
+                        $"Alternate-screen wheel sent {repeatCount} native key presses (VK 0x{virtualKey:X2}) to Microsoft Terminal.");
                 }
             }
             return IntPtr.Zero;
@@ -427,19 +468,21 @@ public partial class SshTerminalHost : System.Windows.Controls.UserControl, ITer
         (GetKeyState(0x11) & 0x8000) != 0 ||
         (GetKeyState(0x12) & 0x8000) != 0;
 
-    private static void PostTerminalNavigationKey(IntPtr hwnd, int virtualKey, int repeatCount)
+    private static void SendTerminalKey(IntPtr hwnd, int virtualKey, int repeatCount)
     {
         const int WmKeyDown = 0x0100;
         const int WmKeyUp = 0x0101;
-        const uint MapVkToVsc = 0;
-        var scanCode = MapVirtualKey(unchecked((uint)virtualKey), MapVkToVsc) & 0xFF;
-        var keyDown = new IntPtr(1L | ((long)scanCode << 16) | (1L << 24));
+        const uint MapVkToVscEx = 4;
+        var mappedScanCode = MapVirtualKey(unchecked((uint)virtualKey), MapVkToVscEx);
+        var scanCode = mappedScanCode & 0xFF;
+        var extendedFlag = (mappedScanCode & 0xFF00) == 0 ? 0L : 1L << 24;
+        var keyDown = new IntPtr(1L | ((long)scanCode << 16) | extendedFlag);
         var keyUp = new IntPtr(keyDown.ToInt64() | (1L << 30) | (1L << 31));
 
         for (var index = 0; index < repeatCount; index++)
         {
-            PostMessage(hwnd, WmKeyDown, new IntPtr(virtualKey), keyDown);
-            PostMessage(hwnd, WmKeyUp, new IntPtr(virtualKey), keyUp);
+            SendMessage(hwnd, WmKeyDown, new IntPtr(virtualKey), keyDown);
+            SendMessage(hwnd, WmKeyUp, new IntPtr(virtualKey), keyUp);
         }
     }
 
@@ -505,6 +548,7 @@ public partial class SshTerminalHost : System.Windows.Controls.UserControl, ITer
         }
 
         _disposed = true;
+        PreviewKeyDown -= OnPreviewKeyDown;
         if (_terminalMouseHooked)
         {
             if (_terminalContainer is not null)
@@ -563,7 +607,6 @@ public partial class SshTerminalHost : System.Windows.Controls.UserControl, ITer
     private static extern uint MapVirtualKey(uint code, uint mapType);
 
     [DllImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool PostMessage(IntPtr hWnd, int message, IntPtr wParam, IntPtr lParam);
+    private static extern IntPtr SendMessage(IntPtr hWnd, int message, IntPtr wParam, IntPtr lParam);
 
 }
