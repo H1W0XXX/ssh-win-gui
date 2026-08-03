@@ -3,6 +3,7 @@ using System.Windows.Input;
 using System.Windows.Threading;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Windows.Interop;
 using Microsoft.Terminal.Wpf;
 using RsyncShell.App.Services;
 using RsyncShell.Core.Models;
@@ -22,6 +23,7 @@ public partial class SshTerminalHost : System.Windows.Controls.UserControl, ITer
     private bool _loaded;
     private bool _disposed;
     private bool _terminalMouseHooked;
+    private bool _threadInputHooked;
     private readonly AlternateScreenTracker _alternateScreen = new();
     private int _wheelDeltaRemainder;
     private static readonly bool InputDiagnostics =
@@ -305,8 +307,48 @@ public partial class SshTerminalHost : System.Windows.Controls.UserControl, ITer
         // mode and can double-send keys to full-screen programs.
         _terminalContainer.MessageHook += TerminalContainerMessageHook;
         _terminalMouseHooked = true;
+        ComponentDispatcher.ThreadPreprocessMessage += OnThreadPreprocessMessage;
+        _threadInputHooked = true;
         if (InputDiagnostics)
             DiagnosticLog.Write("TerminalInput", $"Terminal mouse hook installed on HWND {_terminalContainer.Handle}; keyboard input is owned by Microsoft Terminal.");
+    }
+
+    private void OnThreadPreprocessMessage(ref MSG message, ref bool handled)
+    {
+        try
+        {
+            if (_disposed || handled || !IsKeyboardMessage(message.message) ||
+                (_connection is null && _passwordPrompt is null) || !OwnsNativeWindow(message.hwnd))
+            {
+                return;
+            }
+
+            var virtualKey = ExtractVirtualKey(message.wParam);
+            if (!TryGetKeyboardPasteAction(
+                    message.message,
+                    virtualKey,
+                    IsVirtualKeyDown(0x10),
+                    IsVirtualKeyDown(0x11),
+                    IsVirtualKeyDown(0x12),
+                    out var pasteNow))
+            {
+                return;
+            }
+
+            handled = true;
+            if (pasteNow)
+            {
+                PasteClipboardText();
+                if (InputDiagnostics)
+                {
+                    DiagnosticLog.Write("TerminalInput", "Terminal thread handled Shift+Insert paste.");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            DiagnosticLog.Write("TerminalInput", ex);
+        }
     }
 
     private void OnPreviewKeyDown(object sender, KeyEventArgs e)
@@ -323,6 +365,10 @@ public partial class SshTerminalHost : System.Windows.Controls.UserControl, ITer
         {
             PasteClipboardText();
             e.Handled = true;
+            if (InputDiagnostics)
+            {
+                DiagnosticLog.Write("TerminalInput", "WPF fallback handled Shift+Insert paste.");
+            }
             return;
         }
 
@@ -383,6 +429,13 @@ public partial class SshTerminalHost : System.Windows.Controls.UserControl, ITer
         return isShortcut && (message == WmKeyDown || message == WmKeyUp);
     }
 
+    private bool OwnsNativeWindow(IntPtr hwnd)
+    {
+        var terminalHandle = _terminalContainer?.Handle ?? IntPtr.Zero;
+        return terminalHandle != IntPtr.Zero &&
+               (hwnd == terminalHandle || IsChild(terminalHandle, hwnd));
+    }
+
     private IntPtr TerminalContainerMessageHook(
         IntPtr hwnd,
         int message,
@@ -397,30 +450,6 @@ public partial class SshTerminalHost : System.Windows.Controls.UserControl, ITer
         if (_disposed || _terminalContainer is null || hwnd != _terminalContainer.Handle)
         {
             return IntPtr.Zero;
-        }
-
-        if (IsKeyboardMessage(message))
-        {
-            var keyboardVirtualKey = ExtractVirtualKey(wParam);
-            if (TryGetKeyboardPasteAction(
-                    message,
-                    keyboardVirtualKey,
-                    IsVirtualKeyDown(0x10),
-                    IsVirtualKeyDown(0x11),
-                    IsVirtualKeyDown(0x12),
-                    out var keyboardPasteNow))
-            {
-                handled = true;
-                if (keyboardPasteNow)
-                {
-                    PasteClipboardText();
-                    if (InputDiagnostics)
-                    {
-                        DiagnosticLog.Write("TerminalInput", "Native terminal hook handled Shift+Insert paste.");
-                    }
-                }
-                return IntPtr.Zero;
-            }
         }
 
         if (message == WmLeftButtonDown)
@@ -581,6 +610,9 @@ public partial class SshTerminalHost : System.Windows.Controls.UserControl, ITer
                 if (!string.IsNullOrEmpty(text))
                 {
                     var paste = PrepareTextForPaste(text, _alternateScreen.IsBracketedPasteEnabled);
+                    DiagnosticLog.Write(
+                        "TerminalClipboard",
+                        $"Paste chars={text.Length}, wireChars={paste.Length}, lines={CountPasteLines(text)}, bracketed={_alternateScreen.IsBracketedPasteEnabled}.");
                     if (_connection is not null)
                     {
                         _connection.WriteInput(paste);
@@ -627,6 +659,19 @@ public partial class SshTerminalHost : System.Windows.Controls.UserControl, ITer
             : filtered.ToString();
     }
 
+    internal static int CountPasteLines(string text)
+    {
+        var lines = 1;
+        for (var index = 0; index < text.Length; index++)
+        {
+            if (text[index] == '\n' || (text[index] == '\r' && (index + 1 >= text.Length || text[index + 1] != '\n')))
+            {
+                lines++;
+            }
+        }
+        return lines;
+    }
+
     public void PasteClipboard() => PasteClipboardText();
 
     public void Dispose()
@@ -638,6 +683,11 @@ public partial class SshTerminalHost : System.Windows.Controls.UserControl, ITer
 
         _disposed = true;
         PreviewKeyDown -= OnPreviewKeyDown;
+        if (_threadInputHooked)
+        {
+            ComponentDispatcher.ThreadPreprocessMessage -= OnThreadPreprocessMessage;
+            _threadInputHooked = false;
+        }
         if (_terminalMouseHooked)
         {
             if (_terminalContainer is not null)
@@ -688,6 +738,10 @@ public partial class SshTerminalHost : System.Windows.Controls.UserControl, ITer
 
     [DllImport("user32.dll")]
     private static extern IntPtr SetFocus(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool IsChild(IntPtr parent, IntPtr child);
 
     [DllImport("user32.dll")]
     private static extern short GetKeyState(int virtualKey);

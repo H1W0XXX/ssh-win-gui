@@ -179,6 +179,15 @@ public sealed class SshTerminalConnectionTests
     }
 
     [Theory]
+    [InlineData("single line", 1)]
+    [InlineData("one\r\ntwo", 2)]
+    [InlineData("one\ntwo\rthree", 3)]
+    public void ClipboardPasteMetadataCountsLogicalLines(string input, int expected)
+    {
+        Assert.Equal(expected, SshTerminalHost.CountPasteLines(input));
+    }
+
+    [Theory]
     [InlineData(120, 0x26, 1)]
     [InlineData(-120, 0x28, 1)]
     [InlineData(240, 0x26, 2)]

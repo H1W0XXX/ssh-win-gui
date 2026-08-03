@@ -1,6 +1,5 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
-using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -42,71 +41,12 @@ public partial class MainWindow : Window
     private int _nextTerminalNumber = 1;
     private int _nextTransferNumber = 1;
     private TunnelManagerWindow? _tunnelWindow;
-    private readonly KeyboardHookProc _keyboardHookProc;
-    private IntPtr _keyboardHook;
-    private IntPtr _mainWindowHandle;
-    private bool _hookShiftDown;
-    private bool _hookControlDown;
-    private bool _hookAltDown;
-    private bool _hookConsumedShiftInsert;
-
     public MainWindow()
     {
         InitializeComponent();
-        _keyboardHookProc = KeyboardHookCallback;
         _hostKeyVerifier = new SshHostKeyVerifier(this, _knownHostStore);
         LocalizationService.LanguageChanged += LocalizationService_OnLanguageChanged;
         Loaded += MainWindow_OnLoaded;
-    }
-
-    protected override void OnSourceInitialized(EventArgs e)
-    {
-        base.OnSourceInitialized(e);
-        _mainWindowHandle = new System.Windows.Interop.WindowInteropHelper(this).Handle;
-        _keyboardHook = SetWindowsHookEx(13, _keyboardHookProc, IntPtr.Zero, 0);
-        if (_keyboardHook == IntPtr.Zero)
-        {
-            DiagnosticLog.Write("TerminalInput", $"Unable to install UI keyboard hook: {Marshal.GetLastWin32Error()}.");
-        }
-    }
-
-    private IntPtr KeyboardHookCallback(int code, IntPtr wParam, IntPtr lParam)
-    {
-        if (code >= 0 && GetForegroundWindow() == _mainWindowHandle)
-        {
-            var message = unchecked((int)wParam.ToInt64());
-            var keyboard = Marshal.PtrToStructure<LowLevelKeyboardInput>(lParam);
-            var virtualKey = unchecked((int)keyboard.VirtualKey);
-            var isKeyDown = message is 0x0100 or 0x0104;
-            var isKeyUp = message is 0x0101 or 0x0105;
-            switch (virtualKey)
-            {
-                case 0x10:
-                case 0xA0:
-                case 0xA1:
-                    _hookShiftDown = isKeyDown;
-                    break;
-                case 0x11:
-                case 0xA2:
-                case 0xA3:
-                    _hookControlDown = isKeyDown;
-                    break;
-                case 0x12:
-                case 0xA4:
-                case 0xA5:
-                    _hookAltDown = isKeyDown;
-                    break;
-                case 0x2D when isKeyDown && _hookShiftDown && !_hookControlDown && !_hookAltDown:
-                    _hookConsumedShiftInsert = true;
-                    Dispatcher.BeginInvoke(() => _activeTerminal?.Surface.PasteClipboard());
-                    return new IntPtr(1);
-                case 0x2D when isKeyUp && _hookConsumedShiftInsert:
-                    _hookConsumedShiftInsert = false;
-                    return new IntPtr(1);
-            }
-        }
-
-        return CallNextHookEx(_keyboardHook, code, wParam, lParam);
     }
 
     private async void MainWindow_OnLoaded(object sender, RoutedEventArgs e)
@@ -1823,11 +1763,6 @@ public partial class MainWindow : Window
 
     private void MainWindow_OnClosing(object? sender, CancelEventArgs e)
     {
-        if (_keyboardHook != IntPtr.Zero)
-        {
-            UnhookWindowsHookEx(_keyboardHook);
-            _keyboardHook = IntPtr.Zero;
-        }
         LocalizationService.LanguageChanged -= LocalizationService_OnLanguageChanged;
         _tunnelService.Dispose();
         foreach (var operation in _transferOperations.Values.ToArray())
@@ -1855,35 +1790,6 @@ public partial class MainWindow : Window
     }
 
     private static string EnsureRemoteDirectory(string path) => path.EndsWith('/') ? path : path + "/";
-
-    private delegate IntPtr KeyboardHookProc(int code, IntPtr wParam, IntPtr lParam);
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct LowLevelKeyboardInput
-    {
-        public uint VirtualKey;
-        public uint ScanCode;
-        public uint Flags;
-        public uint Time;
-        public UIntPtr ExtraInfo;
-    }
-
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern IntPtr SetWindowsHookEx(
-        int hookType,
-        KeyboardHookProc callback,
-        IntPtr module,
-        uint threadId);
-
-    [DllImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool UnhookWindowsHookEx(IntPtr hook);
-
-    [DllImport("user32.dll")]
-    private static extern IntPtr CallNextHookEx(IntPtr hook, int code, IntPtr wParam, IntPtr lParam);
-
-    [DllImport("user32.dll")]
-    private static extern IntPtr GetForegroundWindow();
 
     private static string FormatBytes(long value)
     {
