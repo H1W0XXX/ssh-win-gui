@@ -122,9 +122,9 @@ public sealed class SshTerminalConnectionTests
     }
 
     [Theory]
-    [InlineData(120, 0x26, 3)]
-    [InlineData(-120, 0x28, 3)]
-    [InlineData(240, 0x26, 6)]
+    [InlineData(120, 0x26, 1)]
+    [InlineData(-120, 0x28, 1)]
+    [InlineData(240, 0x26, 2)]
     public void AlternateScreenWheelRequestsNativeCursorKeys(
         int delta,
         int expectedVirtualKey,
@@ -160,7 +160,7 @@ public sealed class SshTerminalConnectionTests
         Assert.True(SshTerminalHost.TryGetAlternateScreenWheelNavigation(
             0x020A, WheelWParam(60), true, false, ref remainder, out var secondKey, out var secondCount));
         Assert.Equal(0x26, secondKey);
-        Assert.Equal(3, secondCount);
+        Assert.Equal(1, secondCount);
         Assert.Equal(0, remainder);
     }
 

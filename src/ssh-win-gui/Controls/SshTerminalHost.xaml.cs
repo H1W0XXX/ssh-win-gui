@@ -438,7 +438,7 @@ public partial class SshTerminalHost : System.Windows.Controls.UserControl, ITer
     {
         const int WmMouseWheel = 0x020A;
         const int WheelDelta = 120;
-        const int LinesPerDetent = 3;
+        const int LinesPerDetent = 1;
         virtualKey = 0;
         repeatCount = 0;
         if (message != WmMouseWheel || !alternateScreen || hasModifier)
