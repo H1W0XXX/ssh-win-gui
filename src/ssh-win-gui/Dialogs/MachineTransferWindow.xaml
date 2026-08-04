@@ -135,7 +135,6 @@
                     <TextBlock Text="{DynamicResource RsyncOptions}" FontSize="15" FontWeight="SemiBold" Margin="0,0,0,5" />
                     <CheckBox x:Name="ArchiveCheckBox" Content="{DynamicResource ArchiveOption}" IsChecked="True" Margin="0,2" />
                     <CheckBox x:Name="CompressCheckBox" Content="{DynamicResource CompressOption}" IsChecked="True" Margin="0,2" />
-                    <CheckBox x:Name="CopyContentsCheckBox" Content="{DynamicResource CopyDirectoryContents}" Margin="0,2" />
                     <CheckBox x:Name="DeleteCheckBox" Content="{DynamicResource DeleteOption}" Margin="0,2" />
                     <CheckBox x:Name="DryRunCheckBox" Content="{DynamicResource DryRunOption}" Margin="0,2,0,8" />
 

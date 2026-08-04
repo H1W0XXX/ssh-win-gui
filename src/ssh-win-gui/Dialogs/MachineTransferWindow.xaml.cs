@@ -699,7 +699,6 @@ public partial class MachineTransferWindow : Window
                 job,
                 specification,
                 source.FullPath,
-                source.IsDirectory,
                 sourceAuthentication,
                 destinationAuthentication);
         }
@@ -716,7 +715,6 @@ public partial class MachineTransferWindow : Window
         MachineTransferJob job,
         TransferSpecification specification,
         string sourcePath,
-        bool sourceIsDirectory,
         SshAuthenticationOptions? sourceAuthentication,
         SshAuthenticationOptions? destinationAuthentication)
     {
@@ -750,8 +748,7 @@ public partial class MachineTransferWindow : Window
                         destination,
                         sourcePath,
                         specification.DestinationPath,
-                        specification.Options,
-                        sourceIsDirectory),
+                        specification.Options),
                     destinationAuthentication!,
                     job.Cancellation.Token);
             }
@@ -764,8 +761,7 @@ public partial class MachineTransferWindow : Window
                         source,
                         specification.DestinationPath,
                         sourcePath,
-                        specification.Options,
-                        sourceIsDirectory),
+                        specification.Options),
                     sourceAuthentication!,
                     job.Cancellation.Token);
             }
@@ -784,7 +780,7 @@ public partial class MachineTransferWindow : Window
                     DestinationAuthentication = destinationAuthentication!,
                     DestinationPath = specification.DestinationPath,
                     ExecutionSide = specification.ExecutionSide,
-                    CopyContents = specification.Options.CopyContents && sourceIsDirectory,
+                    CopyContents = false,
                     PreserveTimes = specification.Options.Archive,
                     PreservePermissions = specification.Options.Archive,
                     PreserveLinks = specification.Options.Archive,
@@ -832,8 +828,7 @@ public partial class MachineTransferWindow : Window
         ConnectionProfile profile,
         string localPath,
         string remotePath,
-        TransferOptionSnapshot options,
-        bool sourceIsDirectory) =>
+        TransferOptionSnapshot options) =>
         new()
         {
             Direction = direction,
@@ -841,7 +836,7 @@ public partial class MachineTransferWindow : Window
             Route = SshRouteResolver.Resolve(profile, _profiles),
             LocalPath = localPath,
             RemotePath = remotePath,
-            CopyContents = options.CopyContents && sourceIsDirectory,
+            CopyContents = false,
             PreserveTimes = options.Archive,
             PreservePermissions = options.Archive,
             PreserveLinks = options.Archive,
@@ -930,7 +925,6 @@ public partial class MachineTransferWindow : Window
             new TransferOptionSnapshot(
                 ArchiveCheckBox.IsChecked == true,
                 CompressCheckBox.IsChecked == true,
-                CopyContentsCheckBox.IsChecked == true,
                 DeleteCheckBox.IsChecked == true,
                 DryRunCheckBox.IsChecked == true,
                 bandwidth,
@@ -995,11 +989,6 @@ public partial class MachineTransferWindow : Window
         if (specification.Options.DryRun) args.Add("--dry-run");
         if (specification.Options.BandwidthLimitKbps > 0) args.Add($"--bwlimit={specification.Options.BandwidthLimitKbps}");
         args.AddRange(specification.Options.ExtraArguments);
-        if (specification.Options.CopyContents && DirectoryLike(specification.Source.Choice!, sourcePath))
-        {
-            sourcePath = sourcePath.TrimEnd('/', '\\') + (specification.Source.Choice!.IsLocal ? "\\" : "/");
-        }
-
         string prefix;
         if (specification.Source.Choice!.IsLocal)
         {
@@ -1266,9 +1255,6 @@ public partial class MachineTransferWindow : Window
         return slash >= 0 ? normalized[(slash + 1)..] : normalized;
     }
 
-    private static bool DirectoryLike(EndpointChoice choice, string path) =>
-        choice.IsLocal ? Directory.Exists(path) : path.EndsWith("/", StringComparison.Ordinal);
-
     private static string EndpointPathLabel(EndpointChoice choice, string path) =>
         choice.IsLocal ? path : $"{choice.Profile!.Name}:{path}";
 
@@ -1338,7 +1324,6 @@ public partial class MachineTransferWindow : Window
     private sealed record TransferOptionSnapshot(
         bool Archive,
         bool Compress,
-        bool CopyContents,
         bool Delete,
         bool DryRun,
         int BandwidthLimitKbps,

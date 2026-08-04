@@ -260,7 +260,6 @@
     <sys:String x:Key="RsyncOptions">Rsync options</sys:String>
     <sys:String x:Key="ArchiveOption">Preserve common attributes (time, permissions, links)</sys:String>
     <sys:String x:Key="CompressOption">Compress transfer</sys:String>
-    <sys:String x:Key="CopyDirectoryContents">Copy directory contents only</sys:String>
     <sys:String x:Key="DeleteOption">Delete extra destination files</sys:String>
     <sys:String x:Key="DryRunOption">Dry run (do not write)</sys:String>
     <sys:String x:Key="BandwidthLimit">Bandwidth limit (KB/s, 0 = unlimited)</sys:String>

@@ -260,7 +260,6 @@
     <sys:String x:Key="RsyncOptions">Rsync 选项</sys:String>
     <sys:String x:Key="ArchiveOption">归档常用属性（时间、权限、链接）</sys:String>
     <sys:String x:Key="CompressOption">压缩传输</sys:String>
-    <sys:String x:Key="CopyDirectoryContents">文件夹只复制内容</sys:String>
     <sys:String x:Key="DeleteOption">删除目标端多余文件</sys:String>
     <sys:String x:Key="DryRunOption">试运行（不写入）</sys:String>
     <sys:String x:Key="BandwidthLimit">带宽限制（KB/s，0 表示不限）</sys:String>
