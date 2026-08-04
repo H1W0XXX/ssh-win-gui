@@ -107,6 +107,39 @@ func TestRsyncLogWriterBoundsAndContinuesAfterLongLines(t *testing.T) {
 	}
 }
 
+func TestRsyncProgressLineIsStructuredInsteadOfLogged(t *testing.T) {
+	var output bytes.Buffer
+	reporter := &jobReporter{jobID: "job-progress", out: newEmitter(&output)}
+	writer := &rsyncLogWriter{reporter: reporter, level: "info", parseProgress: true}
+	if _, err := writer.Write([]byte("1,234,567  42%  12.50MB/s  0:00:01 (xfr#1, to-chk=1/2)\r")); err != nil {
+		t.Fatal(err)
+	}
+
+	var message OutboundMessage
+	if err := json.NewDecoder(&output).Decode(&message); err != nil {
+		t.Fatal(err)
+	}
+	if message.Type != "progress" || message.Transferred != 1_234_567 ||
+		message.Percent != 42 || message.BytesPerSecond != 12_500_000 {
+		t.Fatalf("unexpected progress message: %#v", message)
+	}
+	if message.Message != "" {
+		t.Fatalf("progress leaked into log message: %q", message.Message)
+	}
+}
+
+func TestRemoteRsyncProgressOptionIsAddedOnlyWhenNeeded(t *testing.T) {
+	if hasRsyncProgressOption([]string{"-r", "-P"}) != true {
+		t.Fatal("-P was not recognized as a progress option")
+	}
+	if hasRsyncProgressOption([]string{"-r", "--info=stats2,progress2"}) != true {
+		t.Fatal("--info=progress2 was not recognized as a progress option")
+	}
+	if hasRsyncProgressOption([]string{"-r", "-z"}) {
+		t.Fatal("ordinary rsync options were mistaken for progress output")
+	}
+}
+
 func TestPinnedHostKeyCallback(t *testing.T) {
 	_, privateKey, err := ed25519.GenerateKey(cryptorand.Reader)
 	if err != nil {

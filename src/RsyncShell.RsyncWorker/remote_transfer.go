@@ -121,6 +121,9 @@ func runRemoteTransfer(ctx context.Context, req RemoteTransferRequest, reporter 
 		return nil, err
 	}
 	args := buildRemoteRsyncArgs(req.Options)
+	if !hasRsyncProgressOption(args) {
+		args = append(args, "--info=progress2")
+	}
 	args = append(args, "--protect-args", "-e", innerSSH)
 
 	sourcePath := req.SourcePath
@@ -149,8 +152,8 @@ func runRemoteTransfer(ctx context.Context, req RemoteTransferRequest, reporter 
 	if err != nil {
 		return nil, errorCode("ssh_session", fmt.Errorf("open first-hop stderr: %w", err))
 	}
-	stdoutWriter := &rsyncLogWriter{reporter: reporter, level: "info"}
-	stderrWriter := &rsyncLogWriter{reporter: reporter, level: "error"}
+	stdoutWriter := &rsyncLogWriter{reporter: reporter, level: "info", parseProgress: true}
+	stderrWriter := &rsyncLogWriter{reporter: reporter, level: "error", parseProgress: true}
 	stdoutDone := make(chan struct{})
 	stderrDone := make(chan struct{})
 	go func() {
@@ -226,6 +229,16 @@ func buildRemoteRsyncArgs(options TransferOptions) []string {
 		args = append(args, "--partial")
 	}
 	return args
+}
+
+func hasRsyncProgressOption(args []string) bool {
+	for _, arg := range args {
+		if arg == "--progress" || arg == "-P" ||
+			(strings.HasPrefix(arg, "--info=") && strings.Contains(arg, "progress")) {
+			return true
+		}
+	}
+	return false
 }
 
 func buildInnerSSHCommand(endpoint RemoteEndpoint) (string, error) {

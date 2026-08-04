@@ -226,6 +226,8 @@
     <sys:String x:Key="CopyLog">复制日志</sys:String>
     <sys:String x:Key="TunnelRoute">转发路径</sys:String>
     <sys:String x:Key="Status">状态</sys:String>
+    <sys:String x:Key="Progress">进度</sys:String>
+    <sys:String x:Key="Speed">速度</sys:String>
     <sys:String x:Key="TunnelLocalForward">本地监听 → 远程目标 (-L)</sys:String>
     <sys:String x:Key="TunnelRemoteForward">远程监听 → 本地目标 (-R)</sys:String>
     <sys:String x:Key="TunnelLocalSocks5">本机 SOCKS5 代理 (-D)</sys:String>

@@ -226,6 +226,8 @@
     <sys:String x:Key="CopyLog">Copy log</sys:String>
     <sys:String x:Key="TunnelRoute">Route</sys:String>
     <sys:String x:Key="Status">Status</sys:String>
+    <sys:String x:Key="Progress">Progress</sys:String>
+    <sys:String x:Key="Speed">Speed</sys:String>
     <sys:String x:Key="TunnelLocalForward">Local listen → remote target (-L)</sys:String>
     <sys:String x:Key="TunnelRemoteForward">Remote listen → local target (-R)</sys:String>
     <sys:String x:Key="TunnelLocalSocks5">Local SOCKS5 proxy (-D)</sys:String>

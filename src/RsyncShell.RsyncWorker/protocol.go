@@ -132,6 +132,9 @@ type OutboundMessage struct {
 	Phase           string            `json:"phase,omitempty"`
 	ProtocolRead    int64             `json:"protocolReadBytes,omitempty"`
 	ProtocolWritten int64             `json:"protocolWrittenBytes,omitempty"`
+	Transferred     int64             `json:"transferredBytes,omitempty"`
+	Percent         float64           `json:"percent,omitempty"`
+	BytesPerSecond  int64             `json:"bytesPerSecond,omitempty"`
 	Stats           *TransferStat     `json:"stats,omitempty"`
 	Error           *WorkerError      `json:"error,omitempty"`
 	Probe           *RouteProbeResult `json:"probe,omitempty"`

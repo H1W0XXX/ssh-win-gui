@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Runtime.CompilerServices;
@@ -672,6 +673,7 @@ public partial class MachineTransferWindow : Window
         {
             if (transferEvent.Type == "progress")
             {
+                _ = Dispatcher.InvokeAsync(() => job.UpdateProgress(transferEvent));
                 return;
             }
             _ = Dispatcher.InvokeAsync(() =>
@@ -1325,7 +1327,11 @@ public partial class MachineTransferWindow : Window
     {
         private readonly int _logLimit;
         private string _status;
+        private string _progress = string.Empty;
+        private string _speed = string.Empty;
         private bool _isRunning = true;
+        private long _lastProgressBytes;
+        private long _lastProgressTimestamp;
 
         public MachineTransferJob(int number, string source, string destination, int logLimit)
         {
@@ -1351,6 +1357,26 @@ public partial class MachineTransferWindow : Window
                 OnPropertyChanged();
             }
         }
+        public string Progress
+        {
+            get => _progress;
+            private set
+            {
+                if (_progress == value) return;
+                _progress = value;
+                OnPropertyChanged();
+            }
+        }
+        public string Speed
+        {
+            get => _speed;
+            private set
+            {
+                if (_speed == value) return;
+                _speed = value;
+                OnPropertyChanged();
+            }
+        }
         public bool IsRunning
         {
             get => _isRunning;
@@ -1369,6 +1395,45 @@ public partial class MachineTransferWindow : Window
             {
                 LogLines.RemoveRange(0, LogLines.Count - _logLimit);
             }
+        }
+
+        public void UpdateProgress(RsyncWorkerEvent transferEvent)
+        {
+            var bytes = transferEvent.TransferredBytes ??
+                        Math.Max(transferEvent.ProtocolReadBytes, transferEvent.ProtocolWrittenBytes);
+            var now = Stopwatch.GetTimestamp();
+            var bytesPerSecond = transferEvent.BytesPerSecond;
+            if (bytesPerSecond is null && _lastProgressTimestamp > 0 && bytes >= _lastProgressBytes)
+            {
+                var elapsed = Stopwatch.GetElapsedTime(_lastProgressTimestamp, now).TotalSeconds;
+                if (elapsed > 0)
+                {
+                    bytesPerSecond = (long)((bytes - _lastProgressBytes) / elapsed);
+                }
+            }
+            _lastProgressBytes = bytes;
+            _lastProgressTimestamp = now;
+
+            var transferred = FormatTransferSize(bytes);
+            Progress = transferEvent.Percent is { } percent
+                ? $"{percent:0.#}% · {transferred}"
+                : transferred;
+            Speed = bytesPerSecond is > 0
+                ? FormatTransferSize(bytesPerSecond.Value) + "/s"
+                : string.Empty;
+        }
+
+        private static string FormatTransferSize(long value)
+        {
+            string[] units = ["B", "KB", "MB", "GB", "TB", "PB"];
+            var size = (double)Math.Max(0, value);
+            var unit = 0;
+            while (size >= 1000 && unit < units.Length - 1)
+            {
+                size /= 1000;
+                unit++;
+            }
+            return unit == 0 ? $"{value} B" : $"{size:0.#} {units[unit]}";
         }
 
         public event PropertyChangedEventHandler? PropertyChanged;

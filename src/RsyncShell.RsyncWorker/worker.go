@@ -397,6 +397,17 @@ func (r *jobReporter) progress(phase string, read, written int64) {
 	})
 }
 
+func (r *jobReporter) transferProgress(transferred int64, percent float64, bytesPerSecond int64) {
+	_ = r.out.emit(OutboundMessage{
+		Type:           "progress",
+		JobID:          r.jobID,
+		Phase:          "transfer",
+		Transferred:    transferred,
+		Percent:        percent,
+		BytesPerSecond: bytesPerSecond,
+	})
+}
+
 func (r *jobReporter) probe(result RouteProbeResult) {
 	_ = r.out.emit(OutboundMessage{Type: "probe_result", JobID: r.jobID, Probe: &result})
 }

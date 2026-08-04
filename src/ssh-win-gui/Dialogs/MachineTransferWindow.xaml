@@ -254,8 +254,10 @@
                                     <GridView>
                                         <GridViewColumn Header="#" DisplayMemberBinding="{Binding Number}" Width="42" />
                                         <GridViewColumn Header="{DynamicResource Status}" DisplayMemberBinding="{Binding Status}" Width="85" />
-                                        <GridViewColumn Header="{DynamicResource Source}" DisplayMemberBinding="{Binding Source}" Width="230" />
-                                        <GridViewColumn Header="{DynamicResource Destination}" DisplayMemberBinding="{Binding Destination}" Width="230" />
+                                        <GridViewColumn Header="{DynamicResource Progress}" DisplayMemberBinding="{Binding Progress}" Width="125" />
+                                        <GridViewColumn Header="{DynamicResource Speed}" DisplayMemberBinding="{Binding Speed}" Width="90" />
+                                        <GridViewColumn Header="{DynamicResource Source}" DisplayMemberBinding="{Binding Source}" Width="190" />
+                                        <GridViewColumn Header="{DynamicResource Destination}" DisplayMemberBinding="{Binding Destination}" Width="190" />
                                     </GridView>
                                 </ListView.View>
                             </ListView>

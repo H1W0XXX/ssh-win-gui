@@ -7,6 +7,8 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -323,6 +325,7 @@ func reportProgress(activity *activityReadWriter, reporter *jobReporter, stop <-
 type rsyncLogWriter struct {
 	reporter           *jobReporter
 	level              string
+	parseProgress      bool
 	mu                 sync.Mutex
 	buffer             strings.Builder
 	truncated          bool
@@ -360,6 +363,12 @@ func (w *rsyncLogWriter) flushLocked() {
 		line += " ... [diagnostic line truncated]"
 	}
 	if line != "" {
+		if w.parseProgress {
+			if progress, ok := parseRsyncProgressLine(line); ok {
+				w.reporter.transferProgress(progress.transferred, progress.percent, progress.bytesPerSecond)
+				return
+			}
+		}
 		level := w.level
 		if level == "" {
 			level = "info"
@@ -372,6 +381,52 @@ func (w *rsyncLogWriter) flushLocked() {
 			w.suppressionEmitted = true
 		}
 	}
+}
+
+type rsyncProgress struct {
+	transferred    int64
+	percent        float64
+	bytesPerSecond int64
+}
+
+var rsyncProgressPattern = regexp.MustCompile(`^\s*([0-9][0-9,]*)\s+([0-9]{1,3})%\s+([0-9]+(?:\.[0-9]+)?)([kKMGTPE]?B/s)(?:\s|$)`)
+
+func parseRsyncProgressLine(line string) (rsyncProgress, bool) {
+	matches := rsyncProgressPattern.FindStringSubmatch(line)
+	if matches == nil {
+		return rsyncProgress{}, false
+	}
+	transferred, err := strconv.ParseInt(strings.ReplaceAll(matches[1], ",", ""), 10, 64)
+	if err != nil {
+		return rsyncProgress{}, false
+	}
+	percent, err := strconv.ParseFloat(matches[2], 64)
+	if err != nil || percent < 0 || percent > 100 {
+		return rsyncProgress{}, false
+	}
+	speed, err := strconv.ParseFloat(matches[3], 64)
+	if err != nil || speed < 0 {
+		return rsyncProgress{}, false
+	}
+	multipliers := map[byte]float64{
+		'k': 1_000,
+		'K': 1_000,
+		'M': 1_000_000,
+		'G': 1_000_000_000,
+		'T': 1_000_000_000_000,
+		'P': 1_000_000_000_000_000,
+		'E': 1_000_000_000_000_000_000,
+	}
+	unit := matches[4]
+	multiplier := 1.0
+	if len(unit) > len("B/s") {
+		multiplier = multipliers[unit[0]]
+	}
+	return rsyncProgress{
+		transferred:    transferred,
+		percent:        percent,
+		bytesPerSecond: int64(speed * multiplier),
+	}, true
 }
 
 func (w *rsyncLogWriter) flush() {

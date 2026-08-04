@@ -13,7 +13,10 @@ public sealed record RsyncWorkerEvent(
     string? Message,
     string? Phase,
     long ProtocolReadBytes,
-    long ProtocolWrittenBytes);
+    long ProtocolWrittenBytes,
+    long? TransferredBytes,
+    double? Percent,
+    long? BytesPerSecond);
 
 public sealed class RsyncWorkerException : Exception
 {
@@ -497,7 +500,10 @@ public sealed class RsyncWorkerTransferService
             message.Message ?? message.Error?.Message,
             message.Phase,
             message.ProtocolReadBytes,
-            message.ProtocolWrittenBytes));
+            message.ProtocolWrittenBytes,
+            message.TransferredBytes,
+            message.Percent,
+            message.BytesPerSecond));
     }
 
     private static WorkerMessage Deserialize(string line) =>
@@ -572,6 +578,9 @@ public sealed class RsyncWorkerTransferService
         public string? Phase { get; init; }
         public long ProtocolReadBytes { get; init; }
         public long ProtocolWrittenBytes { get; init; }
+        public long? TransferredBytes { get; init; }
+        public double? Percent { get; init; }
+        public long? BytesPerSecond { get; init; }
         public WorkerError? Error { get; init; }
         public WorkerCapabilities? Capabilities { get; init; }
         public WorkerRouteProbeResult? Probe { get; init; }
