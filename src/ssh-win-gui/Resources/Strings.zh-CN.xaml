@@ -324,5 +324,5 @@
     <sys:String x:Key="TransferJobsStarted">已创建 {0} 个传输任务，任务已经开始。可在下方“传输任务”页查看实时状态和日志。</sys:String>
     <sys:String x:Key="PreviewRunsLocally">在 Windows 本机执行：</sys:String>
     <sys:String x:Key="PreviewRunsOn">在“{0}”执行，私钥由 agent 临时转发：</sys:String>
-    <sys:String x:Key="CloseCancelsTransfers">仍有 {0} 个机器传输任务在运行。关闭窗口会取消它们，是否继续？</sys:String>
+    <sys:String x:Key="CloseCancelsTransfers">仍有 {0} 个机器传输任务在运行，是否取消任务？&#10;&#10;是：取消任务并关闭窗口&#10;否：隐藏窗口，任务继续在后台运行&#10;取消：返回传输窗口</sys:String>
 </ResourceDictionary>

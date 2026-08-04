@@ -324,5 +324,5 @@
     <sys:String x:Key="TransferJobsStarted">Created and started {0} transfer job(s). View live status and logs in the Transfer jobs tab below.</sys:String>
     <sys:String x:Key="PreviewRunsLocally">Run on Windows:</sys:String>
     <sys:String x:Key="PreviewRunsOn">Run on “{0}” with the key temporarily forwarded by the agent:</sys:String>
-    <sys:String x:Key="CloseCancelsTransfers">{0} machine-transfer jobs are still running. Closing this window will cancel them. Continue?</sys:String>
+    <sys:String x:Key="CloseCancelsTransfers">{0} machine-transfer job(s) are still running. Cancel them?&#10;&#10;Yes: cancel the jobs and close this window&#10;No: hide this window and keep the jobs running&#10;Cancel: return to the transfer window</sys:String>
 </ResourceDictionary>

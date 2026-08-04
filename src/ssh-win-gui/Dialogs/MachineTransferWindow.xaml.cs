@@ -1053,16 +1053,26 @@ public partial class MachineTransferWindow : Window
     private void MachineTransferWindow_OnClosing(object? sender, CancelEventArgs e)
     {
         var running = _jobs.Where(job => job.IsRunning).ToArray();
-        if (running.Length > 0 && MessageBox.Show(
+        if (running.Length > 0)
+        {
+            var result = MessageBox.Show(
                 this,
                 LocalizationService.Format("CloseCancelsTransfers", running.Length),
                 LocalizationService.Get("MachineTransferTitle"),
-                MessageBoxButton.YesNo,
+                MessageBoxButton.YesNoCancel,
                 MessageBoxImage.Warning,
-                MessageBoxResult.No) != MessageBoxResult.Yes)
-        {
-            e.Cancel = true;
-            return;
+                MessageBoxResult.Cancel);
+            if (result == MessageBoxResult.Cancel)
+            {
+                e.Cancel = true;
+                return;
+            }
+            if (result == MessageBoxResult.No)
+            {
+                e.Cancel = true;
+                _ = Dispatcher.BeginInvoke(Hide);
+                return;
+            }
         }
         _endpointA.LoadCancellation?.Cancel();
         _endpointB.LoadCancellation?.Cancel();

@@ -292,8 +292,12 @@ public partial class MainWindow : Window
 
     private void MachineTransferButton_OnClick(object sender, RoutedEventArgs e)
     {
-        if (_machineTransferWindow is { IsVisible: true })
+        if (_machineTransferWindow is not null)
         {
+            if (!_machineTransferWindow.IsVisible)
+            {
+                _machineTransferWindow.Show();
+            }
             _machineTransferWindow.Activate();
             return;
         }
