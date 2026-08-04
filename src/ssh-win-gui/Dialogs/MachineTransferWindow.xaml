@@ -127,11 +127,6 @@
                     <Button Content="{DynamicResource PreviewCommand}" Height="32" Margin="0,6,0,14"
                             Click="PreviewCommand_OnClick" />
 
-                    <TextBlock Text="{DynamicResource RemoteExecutionSide}" FontWeight="SemiBold" />
-                    <ComboBox x:Name="ExecutionSideComboBox" Height="29" Margin="0,4,0,12"
-                              DisplayMemberPath="DisplayName"
-                              SelectionChanged="ExecutionSideComboBox_OnSelectionChanged" />
-
                     <TextBlock Text="{DynamicResource RsyncOptions}" FontSize="15" FontWeight="SemiBold" Margin="0,0,0,5" />
                     <CheckBox x:Name="ArchiveCheckBox" Content="{DynamicResource ArchiveOption}" IsChecked="True" Margin="0,2" />
                     <CheckBox x:Name="CompressCheckBox" Content="{DynamicResource CompressOption}" IsChecked="True" Margin="0,2" />

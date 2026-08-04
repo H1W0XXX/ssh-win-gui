@@ -61,13 +61,6 @@ public partial class MachineTransferWindow : Window
 
         AHostComboBox.ItemsSource = _choices;
         BHostComboBox.ItemsSource = _choices;
-        ExecutionSideComboBox.ItemsSource = new[]
-        {
-            new ExecutionSideChoice(RsyncRemoteTransferExecutionSide.Automatic, LocalizationService.Get("ExecutionAutomatic")),
-            new ExecutionSideChoice(RsyncRemoteTransferExecutionSide.Source, LocalizationService.Get("ExecutionSource")),
-            new ExecutionSideChoice(RsyncRemoteTransferExecutionSide.Destination, LocalizationService.Get("ExecutionDestination")),
-        };
-        ExecutionSideComboBox.SelectedIndex = 0;
         JobsList.ItemsSource = _jobs;
         RouteResultsList.ItemsSource = _routeChoices;
         AHostComboBox.SelectedIndex = -1;
@@ -291,7 +284,6 @@ public partial class MachineTransferWindow : Window
     private void UpdateTransferMode()
     {
         var bothRemote = _endpointA.Choice is { IsLocal: false } && _endpointB.Choice is { IsLocal: false };
-        ExecutionSideComboBox.IsEnabled = bothRemote;
         DiscoverRoutesButton.IsEnabled = bothRemote && _workerPath is not null;
         DeleteCheckBox.IsEnabled = bothRemote;
         DryRunCheckBox.IsEnabled = bothRemote;
@@ -512,29 +504,11 @@ public partial class MachineTransferWindow : Window
             return;
         }
         _selectedRoute = selected;
-        ExecutionSideComboBox.SelectedIndex = selected.ExecutionSide == RsyncRemoteTransferExecutionSide.Source ? 1 : 2;
         RouteProbeStatusText.Text = LocalizationService.Format(
             "SelectedRoute",
             selected.ExecuteOn,
             selected.Host,
             selected.Port);
-    }
-
-    private void ExecutionSideComboBox_OnSelectionChanged(object sender, SelectionChangedEventArgs e)
-    {
-        if (!_ready || _selectedRoute is null ||
-            ExecutionSideComboBox.SelectedItem is not ExecutionSideChoice selectedExecutionSide ||
-            selectedExecutionSide.Value == _selectedRoute.ExecutionSide)
-        {
-            return;
-        }
-
-        _selectedRoute = null;
-        RouteResultsList.SelectedItem = null;
-        if (_routeChoices.Count > 0)
-        {
-            RouteProbeStatusText.Text = LocalizationService.Get("SelectSuccessfulRoute");
-        }
     }
 
     private void CopyProbeResults_OnClick(object sender, RoutedEventArgs e)
@@ -914,7 +888,6 @@ public partial class MachineTransferWindow : Window
             ? selectedItems
             : [new MachineTransferBrowserItem(PathName(source.Choice, sourcePath), sourcePath, true, false, 0, DateTimeOffset.MinValue)];
         var executionSide = _selectedRoute?.ExecutionSide
-                            ?? (ExecutionSideComboBox.SelectedItem as ExecutionSideChoice)?.Value
                             ?? RsyncRemoteTransferExecutionSide.Automatic;
         return new TransferSpecification(
             source,
@@ -1310,8 +1283,6 @@ public partial class MachineTransferWindow : Window
         public static EndpointChoice Local(string displayName) => new(true, null, $"[{displayName}]");
         public static EndpointChoice Remote(ConnectionProfile profile) => new(false, profile, $"{profile.Group} / {profile.Name}");
     }
-
-    private sealed record ExecutionSideChoice(RsyncRemoteTransferExecutionSide Value, string DisplayName);
 
     private sealed record RouteProbeChoice(
         string FirstHopProfileId,

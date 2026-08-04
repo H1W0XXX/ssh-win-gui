@@ -253,10 +253,6 @@
     <sys:String x:Key="DiscoverRoutes">Discover second-hop routes</sys:String>
     <sys:String x:Key="StartTransfer">Start transfer</sys:String>
     <sys:String x:Key="PreviewCommand">Preview command</sys:String>
-    <sys:String x:Key="RemoteExecutionSide">Remote-to-remote executor</sys:String>
-    <sys:String x:Key="ExecutionAutomatic">Automatic (waiting for route selection)</sys:String>
-    <sys:String x:Key="ExecutionSource">Run on source</sys:String>
-    <sys:String x:Key="ExecutionDestination">Run on destination</sys:String>
     <sys:String x:Key="RsyncOptions">Rsync options</sys:String>
     <sys:String x:Key="ArchiveOption">Preserve common attributes (time, permissions, links)</sys:String>
     <sys:String x:Key="CompressOption">Compress transfer</sys:String>
