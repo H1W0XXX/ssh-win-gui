@@ -945,17 +945,17 @@ public partial class MachineTransferWindow : Window
         }
         var destinationNames = specification.Destination.Items
             .Where(item => !item.IsParent)
-            .Select(item => item.Name)
-            .ToHashSet(StringComparer.Ordinal);
-        var collisions = specification.Sources
-            .Select(item => item.Name)
-            .Where(destinationNames.Contains)
-            .Distinct(StringComparer.Ordinal)
-            .Take(12)
-            .ToArray();
-        var message = collisions.Length > 0
-            ? LocalizationService.Format("ConfirmNamedOverwrite", string.Join(Environment.NewLine, collisions))
-            : LocalizationService.Get("ConfirmPossibleOverwrite");
+            .Select(item => item.Name);
+        var collisions = FindTopLevelCollisions(
+            specification.Sources.Select(item => item.Name),
+            destinationNames);
+        if (collisions.Count == 0)
+        {
+            return true;
+        }
+        var message = LocalizationService.Format(
+            "ConfirmNamedOverwrite",
+            string.Join(Environment.NewLine, collisions));
         return MessageBox.Show(
                    this,
                    message,
@@ -963,6 +963,18 @@ public partial class MachineTransferWindow : Window
                    MessageBoxButton.YesNo,
                    MessageBoxImage.Warning,
                    MessageBoxResult.No) == MessageBoxResult.Yes;
+    }
+
+    internal static IReadOnlyList<string> FindTopLevelCollisions(
+        IEnumerable<string> sourceNames,
+        IEnumerable<string> destinationNames)
+    {
+        var destinationSet = destinationNames.ToHashSet(StringComparer.Ordinal);
+        return sourceNames
+            .Where(destinationSet.Contains)
+            .Distinct(StringComparer.Ordinal)
+            .Take(12)
+            .ToArray();
     }
 
     private bool ConfirmDelete(TransferOptionSnapshot options) =>

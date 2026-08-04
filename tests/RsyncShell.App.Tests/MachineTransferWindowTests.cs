@@ -28,4 +28,24 @@ public sealed class MachineTransferWindowTests
         Assert.Empty(arguments);
         Assert.NotEmpty(error);
     }
+
+    [Fact]
+    public void OverwriteWarningRequiresAnActualSameNameEntry()
+    {
+        var collisions = MachineTransferWindow.FindTopLevelCollisions(
+            ["GLM-5.2-FP8"],
+            ["DeepSeek-V4-Flash-DSpark", "GLM-5.2-NVFP4", "vllm-sm120.tar"]);
+
+        Assert.Empty(collisions);
+    }
+
+    [Fact]
+    public void OverwriteWarningListsSameNameEntries()
+    {
+        var collisions = MachineTransferWindow.FindTopLevelCollisions(
+            ["GLM-5.2-FP8", "vllm-sm120.tar"],
+            ["GLM-5.2-FP8", "other-file"]);
+
+        Assert.Equal(["GLM-5.2-FP8"], collisions);
+    }
 }
