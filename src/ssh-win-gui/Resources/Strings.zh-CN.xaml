@@ -283,7 +283,6 @@
     <sys:String x:Key="DirectoryTruncated">目录条目已截断，只显示前 {0} 项。</sys:String>
     <sys:String x:Key="DirectoryItemCount">{0} 项</sys:String>
     <sys:String x:Key="DirectoryLoadFailed">目录读取失败：{0}</sys:String>
-    <sys:String x:Key="SelectLocalDirectory">选择本地目录</sys:String>
     <sys:String x:Key="MachineTransferPrivateKeyRequired">机器传输只支持私钥登录；会话“{0}”没有可用私钥，也没有已打开的私钥终端。</sys:String>
     <sys:String x:Key="RouteProbeRemoteOnly">第二跳探测要求 A、B 都是已保存的远程 SSH 会话。</sys:String>
     <sys:String x:Key="DiscoveringNetworkAddresses">正在通过两端保存会话读取内网网卡...</sys:String>

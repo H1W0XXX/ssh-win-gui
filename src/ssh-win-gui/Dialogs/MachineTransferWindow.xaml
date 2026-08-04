@@ -67,15 +67,12 @@
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
                     <TextBox x:Name="APathTextBox" Height="29" VerticalContentAlignment="Center"
                              KeyDown="EndpointPath_OnKeyDown" Tag="A" />
                     <Button Grid.Column="1" Content="↑" Width="31" Height="29" Margin="4,0,0,0"
                             ToolTip="{DynamicResource ParentDirectory}" Click="EndpointParent_OnClick" Tag="A" />
-                    <Button Grid.Column="2" Content="{DynamicResource Browse}" Height="29" Margin="4,0,0,0"
-                            Click="EndpointBrowse_OnClick" Tag="A" />
-                    <Button Grid.Column="3" Content="{DynamicResource Refresh}" Height="29" Margin="4,0,0,0"
+                    <Button Grid.Column="2" Content="{DynamicResource Refresh}" Height="29" Margin="4,0,0,0"
                             Click="EndpointRefresh_OnClick" Tag="A" />
                 </Grid>
                 <ListView x:Name="AFileList" Grid.Row="3" SelectionMode="Extended"
@@ -162,15 +159,12 @@
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
                     <TextBox x:Name="BPathTextBox" Height="29" VerticalContentAlignment="Center"
                              KeyDown="EndpointPath_OnKeyDown" Tag="B" />
                     <Button Grid.Column="1" Content="↑" Width="31" Height="29" Margin="4,0,0,0"
                             ToolTip="{DynamicResource ParentDirectory}" Click="EndpointParent_OnClick" Tag="B" />
-                    <Button Grid.Column="2" Content="{DynamicResource Browse}" Height="29" Margin="4,0,0,0"
-                            Click="EndpointBrowse_OnClick" Tag="B" />
-                    <Button Grid.Column="3" Content="{DynamicResource Refresh}" Height="29" Margin="4,0,0,0"
+                    <Button Grid.Column="2" Content="{DynamicResource Refresh}" Height="29" Margin="4,0,0,0"
                             Click="EndpointRefresh_OnClick" Tag="B" />
                 </Grid>
                 <ListView x:Name="BFileList" Grid.Row="3" SelectionMode="Extended"

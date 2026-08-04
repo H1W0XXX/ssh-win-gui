@@ -283,7 +283,6 @@
     <sys:String x:Key="DirectoryTruncated">Directory entries truncated to the first {0} items.</sys:String>
     <sys:String x:Key="DirectoryItemCount">{0} items</sys:String>
     <sys:String x:Key="DirectoryLoadFailed">Directory load failed: {0}</sys:String>
-    <sys:String x:Key="SelectLocalDirectory">Select local directory</sys:String>
     <sys:String x:Key="MachineTransferPrivateKeyRequired">Machine transfer supports private keys only. Session “{0}” has no usable saved key or open private-key terminal.</sys:String>
     <sys:String x:Key="RouteProbeRemoteOnly">Second-hop discovery requires two saved remote SSH sessions.</sys:String>
     <sys:String x:Key="DiscoveringNetworkAddresses">Reading internal interfaces through both saved sessions...</sys:String>

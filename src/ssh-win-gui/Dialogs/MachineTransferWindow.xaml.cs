@@ -6,7 +6,6 @@ using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
-using Microsoft.Win32;
 using RsyncShell.App.Services;
 using RsyncShell.Core.Models;
 using RsyncShell.Core.Services;
@@ -117,30 +116,6 @@ public partial class MachineTransferWindow : Window
         }
         e.Handled = true;
         await RefreshEndpointAsync(EndpointFromSender(sender));
-    }
-
-    private async void EndpointBrowse_OnClick(object sender, RoutedEventArgs e)
-    {
-        var endpoint = EndpointFromSender(sender);
-        if (endpoint.Choice is not { IsLocal: true })
-        {
-            endpoint.PathTextBox.Focus();
-            endpoint.PathTextBox.SelectAll();
-            return;
-        }
-        var dialog = new OpenFolderDialog
-        {
-            Title = LocalizationService.Get("SelectLocalDirectory"),
-            InitialDirectory = Directory.Exists(endpoint.PathTextBox.Text)
-                ? endpoint.PathTextBox.Text
-                : Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-        };
-        if (dialog.ShowDialog(this) != true)
-        {
-            return;
-        }
-        endpoint.PathTextBox.Text = dialog.FolderName;
-        await RefreshEndpointAsync(endpoint);
     }
 
     private async void EndpointFileList_OnMouseDoubleClick(object sender, MouseButtonEventArgs e)
