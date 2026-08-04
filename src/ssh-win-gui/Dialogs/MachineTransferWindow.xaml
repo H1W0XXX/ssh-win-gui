@@ -218,6 +218,8 @@
                             <StackPanel Orientation="Horizontal" DockPanel.Dock="Right">
                                 <ProgressBar x:Name="RouteProbeProgress" Width="110" Height="5" IsIndeterminate="True"
                                              Visibility="Collapsed" Margin="0,0,8,0" VerticalAlignment="Center" />
+                                <Button Content="{DynamicResource ViewDiagnosticLog}" Padding="10,3" Margin="0,0,6,0"
+                                        Click="ViewDiagnosticLog_OnClick" />
                                 <Button Content="{DynamicResource CopyProbeResults}" Padding="10,3" Click="CopyProbeResults_OnClick" />
                             </StackPanel>
                             <TextBlock x:Name="RouteProbeStatusText" Text="{DynamicResource RouteProbeNotRun}"

@@ -268,6 +268,9 @@
     <sys:String x:Key="ExtraArgumentsHint">Single and double quotes are supported. Each argument is escaped separately and is not executed as a shell command.</sys:String>
     <sys:String x:Key="RouteProbeResults">Second-hop probe results</sys:String>
     <sys:String x:Key="CopyProbeResults">Copy probe results</sys:String>
+    <sys:String x:Key="ViewDiagnosticLog">View diagnostic log</sys:String>
+    <sys:String x:Key="DiagnosticLogTitle">Machine transfer diagnostic log</sys:String>
+    <sys:String x:Key="NoDiagnosticLogs">No diagnostic log entries yet.</sys:String>
     <sys:String x:Key="RouteProbeNotRun">Not probed. Select two remote machines and click Discover second-hop routes.</sys:String>
     <sys:String x:Key="ExecuteOn">Execute on</sys:String>
     <sys:String x:Key="TargetSession">Target session</sys:String>

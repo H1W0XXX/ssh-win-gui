@@ -18,6 +18,7 @@ public partial class MachineTransferWindow : Window
 {
     private const int LocalDirectoryEntryLimit = 2_000;
     private const int JobLogLineLimit = 1_000;
+    private const int DiagnosticLogLineLimit = 2_000;
     private readonly IReadOnlyList<ConnectionProfile> _profiles;
     private readonly string? _workerPath;
     private readonly Func<SshHostKeyInfo, bool> _verifyHostKey;
@@ -27,6 +28,8 @@ public partial class MachineTransferWindow : Window
     private readonly Dictionary<string, SshAuthenticationOptions> _authenticationCache = new(StringComparer.Ordinal);
     private readonly ObservableCollection<MachineTransferJob> _jobs = [];
     private readonly ObservableCollection<RouteProbeChoice> _routeChoices = [];
+    private readonly Queue<string> _diagnosticLog = new();
+    private readonly object _diagnosticLogGate = new();
     private readonly EndpointState _endpointA;
     private readonly EndpointState _endpointB;
     private readonly IReadOnlyList<EndpointChoice> _choices;
@@ -173,6 +176,7 @@ public partial class MachineTransferWindow : Window
         var generation = ++endpoint.LoadGeneration;
         endpoint.Progress.Visibility = Visibility.Visible;
         endpoint.StatusText.Text = LocalizationService.Get("LoadingDirectory");
+        endpoint.StatusText.ToolTip = null;
 
         try
         {
@@ -230,7 +234,10 @@ public partial class MachineTransferWindow : Window
         }
         catch (Exception ex)
         {
-            endpoint.StatusText.Text = LocalizationService.Format("DirectoryLoadFailed", ex.Message);
+            var message = LocalizationService.Format("DirectoryLoadFailed", ex.Message);
+            endpoint.StatusText.Text = message;
+            endpoint.StatusText.ToolTip = message;
+            AppendDiagnostic($"directory:{endpoint.Name}", ex.ToString());
         }
         finally
         {
@@ -308,6 +315,7 @@ public partial class MachineTransferWindow : Window
 
     private async void DiscoverRoutes_OnClick(object sender, RoutedEventArgs e)
     {
+        RouteProbeTab.IsSelected = true;
         var source = AToBRadio.IsChecked == true ? _endpointA : _endpointB;
         var destination = AToBRadio.IsChecked == true ? _endpointB : _endpointA;
         source.Choice = source.HostComboBox.SelectedItem as EndpointChoice;
@@ -339,8 +347,11 @@ public partial class MachineTransferWindow : Window
         RouteResultsList.SelectedItem = null;
         RouteProbeProgress.Visibility = Visibility.Visible;
         RouteProbeStatusText.Text = LocalizationService.Get("DiscoveringNetworkAddresses");
+        RouteProbeStatusText.ToolTip = null;
         DiscoverRoutesButton.IsEnabled = false;
-        RouteProbeTab.IsSelected = true;
+        AppendDiagnostic(
+            "route",
+            $"Starting bidirectional route discovery: {source.Choice.Profile.Name} <-> {destination.Choice.Profile.Name}");
 
         try
         {
@@ -363,11 +374,17 @@ public partial class MachineTransferWindow : Window
             var destinationInventory = await destinationInventoryTask;
             var sourceCandidates = BuildRouteCandidates(source.Choice.Profile, sourceInventory);
             var destinationCandidates = BuildRouteCandidates(destination.Choice.Profile, destinationInventory);
+            AppendInventoryDiagnostic(source.Choice.Profile, sourceInventory, sourceCandidates);
+            AppendInventoryDiagnostic(destination.Choice.Profile, destinationInventory, destinationCandidates);
 
             RouteProbeStatusText.Text = LocalizationService.Format(
                 "ProbingRouteCandidates",
                 destinationCandidates.Count + sourceCandidates.Count);
-            var sourceProbe = new RsyncWorkerTransferService(_workerPath).ProbeRemoteRoutesAsync(
+            var sourceProbeService = new RsyncWorkerTransferService(_workerPath);
+            var destinationProbeService = new RsyncWorkerTransferService(_workerPath);
+            AttachProbeDiagnostics(sourceProbeService, source.Choice.Profile.Name);
+            AttachProbeDiagnostics(destinationProbeService, destination.Choice.Profile.Name);
+            var sourceProbe = sourceProbeService.ProbeRemoteRoutesAsync(
                 new RsyncRemoteRouteProbeRequest
                 {
                     FirstHopProfile = source.Choice.Profile,
@@ -379,7 +396,7 @@ public partial class MachineTransferWindow : Window
                     Candidates = destinationCandidates,
                 },
                 token);
-            var destinationProbe = new RsyncWorkerTransferService(_workerPath).ProbeRemoteRoutesAsync(
+            var destinationProbe = destinationProbeService.ProbeRemoteRoutesAsync(
                 new RsyncRemoteRouteProbeRequest
                 {
                     FirstHopProfile = destination.Choice.Profile,
@@ -409,6 +426,11 @@ public partial class MachineTransferWindow : Window
             foreach (var row in rows)
             {
                 _routeChoices.Add(row);
+                AppendDiagnostic(
+                    "route-result",
+                    $"execute={row.ExecuteOn}; target={row.TargetSession}; interface={row.InterfaceName}; " +
+                    $"address={row.Host}:{row.Port}; success={row.Success}; latency_ms={row.LatencyMilliseconds}; " +
+                    $"fingerprint={row.Fingerprint}; details={row.Message}");
             }
             var succeeded = rows.Count(row => row.Success);
             RouteProbeStatusText.Text = succeeded > 0
@@ -422,6 +444,9 @@ public partial class MachineTransferWindow : Window
         catch (Exception ex)
         {
             RouteProbeStatusText.Text = LocalizationService.Format("RouteProbeFailed", ex.Message);
+            RouteProbeStatusText.ToolTip = ex.Message;
+            AppendDiagnostic("route-error", ex.ToString());
+            ShowDiagnosticLog();
         }
         finally
         {
@@ -534,6 +559,75 @@ public partial class MachineTransferWindow : Window
                 SingleLine(route.Fingerprint),
                 SingleLine(route.Message))));
         Clipboard.SetText(string.Join(Environment.NewLine, lines));
+    }
+
+    private void ViewDiagnosticLog_OnClick(object sender, RoutedEventArgs e) => ShowDiagnosticLog();
+
+    private void ShowDiagnosticLog()
+    {
+        string text;
+        lock (_diagnosticLogGate)
+        {
+            text = _diagnosticLog.Count == 0
+                ? LocalizationService.Get("NoDiagnosticLogs")
+                : string.Join(Environment.NewLine, _diagnosticLog);
+        }
+        var dialog = new CommandPreviewDialog(
+            text,
+            LocalizationService.Get("DiagnosticLogTitle"),
+            LocalizationService.Get("CopyLog"))
+        {
+            Owner = this,
+        };
+        dialog.ShowDialog();
+    }
+
+    private void AttachProbeDiagnostics(RsyncWorkerTransferService service, string firstHopName)
+    {
+        service.EventReceived += (_, workerEvent) =>
+        {
+            var detail = workerEvent.Message ?? workerEvent.State;
+            if (!string.IsNullOrWhiteSpace(detail))
+            {
+                AppendDiagnostic(
+                    $"worker:{firstHopName}",
+                    $"type={workerEvent.Type}; level={workerEvent.Level}; phase={workerEvent.Phase}; detail={detail}");
+            }
+        };
+    }
+
+    private void AppendInventoryDiagnostic(
+        ConnectionProfile profile,
+        RemoteNetworkInventory inventory,
+        IReadOnlyList<RemoteNetworkAddressCandidate> candidates)
+    {
+        var addresses = inventory.Addresses.Count == 0
+            ? "(none)"
+            : string.Join(", ", inventory.Addresses.Select(address =>
+                $"{address.InterfaceName}={address.Address}/{address.PrefixLength}"));
+        var routes = string.Join(", ", candidates.Select(candidate =>
+            $"{candidate.InterfaceName}={candidate.Host}:{candidate.Port}"));
+        AppendDiagnostic(
+            "inventory",
+            $"session={profile.Name}; host={inventory.HostName}; ssh_local={inventory.SshLocalAddress}:{inventory.SshLocalPort}; " +
+            $"addresses={addresses}; candidates={routes}");
+    }
+
+    private void AppendDiagnostic(string category, string message)
+    {
+        var timestamp = DateTimeOffset.Now.ToString("yyyy-MM-dd HH:mm:ss.fff", CultureInfo.InvariantCulture);
+        var lines = message.Replace("\r\n", "\n", StringComparison.Ordinal).Replace('\r', '\n').Split('\n');
+        lock (_diagnosticLogGate)
+        {
+            foreach (var line in lines)
+            {
+                _diagnosticLog.Enqueue($"{timestamp} [{category}] {line}");
+            }
+            while (_diagnosticLog.Count > DiagnosticLogLineLimit)
+            {
+                _diagnosticLog.Dequeue();
+            }
+        }
     }
 
     private void StartTransfer_OnClick(object sender, RoutedEventArgs e)
@@ -1110,12 +1204,20 @@ public partial class MachineTransferWindow : Window
         return items;
     }
 
-    private static string DefaultPath(EndpointChoice? choice) => choice switch
+    private static string DefaultPath(EndpointChoice? choice)
     {
-        { IsLocal: true } => Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-        { Profile: not null } => "/home/" + choice.Profile.Username,
-        _ => string.Empty,
-    };
+        if (choice is { IsLocal: true })
+        {
+            return Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        }
+        if (choice?.Profile is not { } profile)
+        {
+            return string.Empty;
+        }
+        return string.Equals(profile.Username, "root", StringComparison.OrdinalIgnoreCase)
+            ? "/root"
+            : "/home/" + profile.Username;
+    }
 
     private static string ParentPath(EndpointChoice? choice, string path)
     {
