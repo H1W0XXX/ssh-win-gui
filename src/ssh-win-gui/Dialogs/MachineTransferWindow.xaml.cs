@@ -50,11 +50,10 @@ public partial class MachineTransferWindow : Window
             "A", AHostComboBox, APathTextBox, AFileList, AStatusText, AProgress, AEndpointText);
         _endpointB = new EndpointState(
             "B", BHostComboBox, BPathTextBox, BFileList, BStatusText, BProgress, BEndpointText);
-        _choices = new[] { EndpointChoice.Local(LocalizationService.Get("Local")) }
-            .Concat(_profiles
-                .OrderBy(profile => profile.Group, StringComparer.CurrentCultureIgnoreCase)
-                .ThenBy(profile => profile.Name, StringComparer.CurrentCultureIgnoreCase)
-                .Select(EndpointChoice.Remote))
+        _choices = _profiles
+            .OrderBy(profile => profile.Group, StringComparer.CurrentCultureIgnoreCase)
+            .ThenBy(profile => profile.Name, StringComparer.CurrentCultureIgnoreCase)
+            .Select(EndpointChoice.Remote)
             .ToArray();
 
         AHostComboBox.ItemsSource = _choices;
@@ -68,23 +67,9 @@ public partial class MachineTransferWindow : Window
         ExecutionSideComboBox.SelectedIndex = 0;
         JobsList.ItemsSource = _jobs;
         RouteResultsList.ItemsSource = _routeChoices;
-        AHostComboBox.SelectedIndex = 0;
-        BHostComboBox.SelectedIndex = _choices.Count > 1 ? 1 : 0;
+        AHostComboBox.SelectedIndex = -1;
+        BHostComboBox.SelectedIndex = -1;
         _ready = true;
-        _endpointA.Choice = AHostComboBox.SelectedItem as EndpointChoice;
-        _endpointB.Choice = BHostComboBox.SelectedItem as EndpointChoice;
-        APathTextBox.Text = DefaultPath(_endpointA.Choice);
-        BPathTextBox.Text = DefaultPath(_endpointB.Choice);
-        AEndpointText.Text = _endpointA.Choice?.EndpointLabel ?? string.Empty;
-        BEndpointText.Text = _endpointB.Choice?.EndpointLabel ?? string.Empty;
-        Loaded += async (_, _) =>
-        {
-            await RefreshEndpointAsync(_endpointA);
-            if (!ReferenceEquals(_endpointA.Choice, _endpointB.Choice) || !_endpointB.Choice!.IsLocal)
-            {
-                await RefreshEndpointAsync(_endpointB);
-            }
-        };
         UpdateTransferMode();
     }
 
@@ -106,6 +91,15 @@ public partial class MachineTransferWindow : Window
         endpoint.PathTextBox.Text = DefaultPath(endpoint.Choice);
         endpoint.EndpointText.Text = endpoint.Choice?.EndpointLabel ?? string.Empty;
         UpdateTransferMode();
+        if (endpoint.Choice is null)
+        {
+            endpoint.LoadCancellation?.Cancel();
+            endpoint.Items.Clear();
+            endpoint.FileList.ItemsSource = endpoint.Items;
+            endpoint.StatusText.Text = string.Empty;
+            endpoint.Progress.Visibility = Visibility.Collapsed;
+            return;
+        }
         await RefreshEndpointAsync(endpoint);
     }
 

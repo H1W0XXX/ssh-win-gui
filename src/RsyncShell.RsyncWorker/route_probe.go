@@ -78,6 +78,14 @@ func runRouteProbe(ctx context.Context, req RouteProbeRequest, reporter *jobRepo
 	if err := agent.ForwardToAgent(firstHop, keyring); err != nil {
 		return nil, errorCode("ssh_agent", fmt.Errorf("forward target key to first hop: %w", err))
 	}
+	agentSession, err := firstHop.NewSession()
+	if err != nil {
+		return nil, errorCode("ssh_session", fmt.Errorf("create first-hop agent session: %w", err))
+	}
+	defer agentSession.Close()
+	if err := agent.RequestAgentForwarding(agentSession); err != nil {
+		return nil, errorCode("ssh_agent", fmt.Errorf("request SSH agent forwarding: %w", err))
+	}
 
 	reporter.state("probing")
 	probeContext, cancel := context.WithCancel(ctx)
@@ -131,10 +139,6 @@ func probeRouteCandidate(
 		return result
 	}
 	defer session.Close()
-	if err := agent.RequestAgentForwarding(session); err != nil {
-		result.Message = "request agent forwarding: " + err.Error()
-		return result
-	}
 	innerSSH, err := buildInnerSSHCommand(target)
 	if err != nil {
 		result.Message = err.Error()
