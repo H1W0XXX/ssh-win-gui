@@ -317,6 +317,9 @@
     <sys:String x:Key="JobCancelled">Cancelled</sys:String>
     <sys:String x:Key="JobFailed">Failed</sys:String>
     <sys:String x:Key="Preview">Command preview</sys:String>
+    <sys:String x:Key="CopyCommand">Copy command</sys:String>
+    <sys:String x:Key="CloseWindow">Close</sys:String>
+    <sys:String x:Key="TransferJobsStarted">Created and started {0} transfer job(s). View live status and logs in the Transfer jobs tab below.</sys:String>
     <sys:String x:Key="PreviewRunsLocally">Run on Windows:</sys:String>
     <sys:String x:Key="PreviewRunsOn">Run on “{0}” with the key temporarily forwarded by the agent:</sys:String>
     <sys:String x:Key="CloseCancelsTransfers">{0} machine-transfer jobs are still running. Closing this window will cancel them. Continue?</sys:String>

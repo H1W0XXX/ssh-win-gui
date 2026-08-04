@@ -536,7 +536,7 @@ public partial class MachineTransferWindow : Window
         Clipboard.SetText(string.Join(Environment.NewLine, lines));
     }
 
-    private async void StartTransfer_OnClick(object sender, RoutedEventArgs e)
+    private void StartTransfer_OnClick(object sender, RoutedEventArgs e)
     {
         var specification = BuildSpecification(showErrors: true);
         if (specification is null)
@@ -609,7 +609,13 @@ public partial class MachineTransferWindow : Window
                 sourceAuthentication,
                 destinationAuthentication);
         }
-        await Task.Yield();
+        TransferJobsTab.IsSelected = true;
+        MessageBox.Show(
+            this,
+            LocalizationService.Format("TransferJobsStarted", specification.Sources.Count),
+            LocalizationService.Get("StartTransfer"),
+            MessageBoxButton.OK,
+            MessageBoxImage.Information);
     }
 
     private async Task RunJobAsync(
@@ -760,22 +766,13 @@ public partial class MachineTransferWindow : Window
         var lines = specification.Sources
             .Select(source => BuildPreview(specification, source.FullPath))
             .ToArray();
-        var job = new MachineTransferJob(
-            _nextJobNumber++,
-            LocalizationService.Get("Preview"),
-            LocalizationService.Get("Preview"),
-            JobLogLineLimit)
+        var dialog = new CommandPreviewDialog(string.Join(
+            Environment.NewLine + Environment.NewLine,
+            lines))
         {
-            Status = LocalizationService.Get("Preview"),
-            IsRunning = false,
+            Owner = this,
         };
-        foreach (var line in lines)
-        {
-            job.Append(line);
-        }
-        _jobs.Insert(0, job);
-        JobsList.SelectedItem = job;
-        RefreshSelectedJobLog(job);
+        dialog.ShowDialog();
     }
 
     private TransferSpecification? BuildSpecification(bool showErrors)

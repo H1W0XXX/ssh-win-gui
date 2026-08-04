@@ -241,7 +241,7 @@
                         </ListView>
                     </Grid>
                 </TabItem>
-                <TabItem Header="{DynamicResource TransferJobs}">
+                <TabItem x:Name="TransferJobsTab" Header="{DynamicResource TransferJobs}">
                     <Grid Margin="6">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />
