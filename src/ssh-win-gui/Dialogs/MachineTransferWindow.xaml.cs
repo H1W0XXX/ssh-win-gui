@@ -285,7 +285,6 @@ public partial class MachineTransferWindow : Window
     {
         var bothRemote = _endpointA.Choice is { IsLocal: false } && _endpointB.Choice is { IsLocal: false };
         ExecutionSideComboBox.IsEnabled = bothRemote;
-        ExecutionSideComboBox.IsHitTestVisible = false;
         DiscoverRoutesButton.IsEnabled = bothRemote && _workerPath is not null;
         DeleteCheckBox.IsEnabled = bothRemote;
         DryRunCheckBox.IsEnabled = bothRemote;
@@ -494,6 +493,23 @@ public partial class MachineTransferWindow : Window
             selected.ExecuteOn,
             selected.Host,
             selected.Port);
+    }
+
+    private void ExecutionSideComboBox_OnSelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!_ready || _selectedRoute is null ||
+            ExecutionSideComboBox.SelectedItem is not ExecutionSideChoice selectedExecutionSide ||
+            selectedExecutionSide.Value == _selectedRoute.ExecutionSide)
+        {
+            return;
+        }
+
+        _selectedRoute = null;
+        RouteResultsList.SelectedItem = null;
+        if (_routeChoices.Count > 0)
+        {
+            RouteProbeStatusText.Text = LocalizationService.Get("SelectSuccessfulRoute");
+        }
     }
 
     private void CopyProbeResults_OnClick(object sender, RoutedEventArgs e)
