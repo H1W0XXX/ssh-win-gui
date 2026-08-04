@@ -28,7 +28,7 @@ public sealed class RsyncWorkerException : Exception
 
 public sealed class RsyncWorkerTransferService
 {
-    private const int ProtocolVersion = 2;
+    private const int ProtocolVersion = 3;
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -50,6 +50,68 @@ public sealed class RsyncWorkerTransferService
         CancellationToken cancellationToken = default)
     {
         authentication.Validate();
+        await RunWorkerAsync(
+                "transfer",
+                requestId => BuildTransferMessage(requestId, request, authentication),
+                requireLocalTransferDirections: true,
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    public async Task TransferRemoteToRemoteAsync(
+        RsyncRemoteTransferRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        request.SourceAuthentication.Validate();
+        request.DestinationAuthentication.Validate();
+        await RunWorkerAsync(
+                "remote_transfer",
+                requestId => BuildRemoteTransferMessage(requestId, request),
+                requireLocalTransferDirections: false,
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    public async Task<IReadOnlyList<RsyncRemoteRouteProbeResult>> ProbeRemoteRoutesAsync(
+        RsyncRemoteRouteProbeRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        request.FirstHopAuthentication.Validate();
+        request.TargetAuthentication.Validate();
+        var results = new List<RsyncRemoteRouteProbeResult>();
+        await RunWorkerAsync(
+                "probe_routes",
+                requestId => BuildRouteProbeMessage(requestId, request),
+                requireLocalTransferDirections: false,
+                cancellationToken,
+                message =>
+                {
+                    if (message.Type == "probe_result" && message.Probe is not null)
+                    {
+                        results.Add(new RsyncRemoteRouteProbeResult
+                        {
+                            Host = message.Probe.Host,
+                            Port = message.Probe.Port,
+                            InterfaceName = message.Probe.InterfaceName,
+                            IsSavedEndpoint = message.Probe.IsSavedEndpoint,
+                            Success = message.Probe.Success,
+                            LatencyMilliseconds = message.Probe.LatencyMilliseconds,
+                            Fingerprint = message.Probe.Fingerprint,
+                            Message = message.Probe.Message,
+                        });
+                    }
+                })
+            .ConfigureAwait(false);
+        return results;
+    }
+
+    private async Task RunWorkerAsync(
+        string requiredOperation,
+        Func<string, object> buildRequest,
+        bool requireLocalTransferDirections,
+        CancellationToken cancellationToken,
+        Action<WorkerMessage>? observeMessage = null)
+    {
         var startInfo = new ProcessStartInfo
         {
             FileName = _workerPath,
@@ -154,16 +216,17 @@ public sealed class RsyncWorkerTransferService
                     $"Unsupported rsync worker protocol {hello.ProtocolVersion}; expected {ProtocolVersion}.");
             }
             if (hello.Capabilities is null ||
-                !hello.Capabilities.Operations.Contains("transfer", StringComparer.Ordinal) ||
+                !hello.Capabilities.Operations.Contains(requiredOperation, StringComparer.Ordinal) ||
                 !hello.Capabilities.Operations.Contains("cancel", StringComparer.Ordinal) ||
-                !hello.Capabilities.Directions.Contains("upload", StringComparer.Ordinal) ||
-                !hello.Capabilities.Directions.Contains("download", StringComparer.Ordinal))
+                (requireLocalTransferDirections &&
+                 (!hello.Capabilities.Directions.Contains("upload", StringComparer.Ordinal) ||
+                  !hello.Capabilities.Directions.Contains("download", StringComparer.Ordinal))))
             {
                 throw new InvalidOperationException("The rsync worker hello is missing required capabilities.");
             }
 
             var requestId = "request-" + Guid.NewGuid().ToString("N");
-            WriteMessage(BuildTransferMessage(requestId, request, authentication));
+            WriteMessage(buildRequest(requestId));
             var cancellationSignal = cancellationToken.CanBeCanceled
                 ? Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken)
                 : NeverCompletingTask;
@@ -190,6 +253,7 @@ public sealed class RsyncWorkerTransferService
                 }
 
                 var message = Deserialize(line);
+                observeMessage?.Invoke(message);
                 if (message.Type == "state" && message.State == "queued" && !string.IsNullOrWhiteSpace(message.JobId))
                 {
                     if (jobId is not null || !string.Equals(message.RequestId, requestId, StringComparison.Ordinal))
@@ -298,6 +362,84 @@ public sealed class RsyncWorkerTransferService
                     request.DryRun,
                     request.Compress,
                     request.Partial,
+                    request.BandwidthLimitKbps,
+                    request.ExtraArguments,
+                },
+            },
+        };
+    }
+
+    private static object BuildRouteProbeMessage(
+        string requestId,
+        RsyncRemoteRouteProbeRequest request)
+    {
+        var firstHopRoute = request.FirstHopRoute.Count == 0
+            ? [request.FirstHopProfile]
+            : request.FirstHopRoute;
+        var targetRoute = request.TargetRoute.Count == 0
+            ? [request.TargetProfile]
+            : request.TargetRoute;
+        return new
+        {
+            type = "probe_routes",
+            requestId,
+            routeProbe = new
+            {
+                firstHop = BuildRemote(firstHopRoute, 0, request.FirstHopAuthentication),
+                target = BuildRemote(targetRoute, 0, request.TargetAuthentication),
+                candidates = request.Candidates.Select(candidate => new
+                {
+                    candidate.Host,
+                    candidate.Port,
+                    candidate.InterfaceName,
+                    candidate.IsSavedEndpoint,
+                }),
+            },
+        };
+    }
+
+    private static object BuildRemoteTransferMessage(
+        string requestId,
+        RsyncRemoteTransferRequest request)
+    {
+        var sourceRoute = request.SourceRoute.Count == 0
+            ? [request.SourceProfile]
+            : request.SourceRoute;
+        var destinationRoute = request.DestinationRoute.Count == 0
+            ? [request.DestinationProfile]
+            : request.DestinationRoute;
+        return new
+        {
+            type = "remote_transfer",
+            requestId,
+            remoteTransfer = new
+            {
+                sourcePath = request.SourcePath,
+                destinationPath = request.DestinationPath,
+                copyContents = request.CopyContents,
+                executionSide = request.ExecutionSide switch
+                {
+                    RsyncRemoteTransferExecutionSide.Source => "source",
+                    RsyncRemoteTransferExecutionSide.Destination => "destination",
+                    _ => "auto",
+                },
+                source = BuildRemote(sourceRoute, 0, request.SourceAuthentication),
+                destination = BuildRemote(destinationRoute, 0, request.DestinationAuthentication),
+                request.SourceTransferHost,
+                request.SourceTransferPort,
+                request.DestinationTransferHost,
+                request.DestinationTransferPort,
+                options = new
+                {
+                    request.PreserveTimes,
+                    request.PreservePermissions,
+                    request.PreserveLinks,
+                    request.Delete,
+                    request.DryRun,
+                    request.Compress,
+                    request.Partial,
+                    request.BandwidthLimitKbps,
+                    request.ExtraArguments,
                 },
             },
         };
@@ -432,6 +574,7 @@ public sealed class RsyncWorkerTransferService
         public long ProtocolWrittenBytes { get; init; }
         public WorkerError? Error { get; init; }
         public WorkerCapabilities? Capabilities { get; init; }
+        public WorkerRouteProbeResult? Probe { get; init; }
     }
 
     private sealed record WorkerError
@@ -444,6 +587,18 @@ public sealed class RsyncWorkerTransferService
     {
         public string[] Operations { get; init; } = [];
         public string[] Directions { get; init; } = [];
+    }
+
+    private sealed record WorkerRouteProbeResult
+    {
+        public string Host { get; init; } = string.Empty;
+        public int Port { get; init; }
+        public string InterfaceName { get; init; } = string.Empty;
+        public bool IsSavedEndpoint { get; init; }
+        public bool Success { get; init; }
+        public long LatencyMilliseconds { get; init; }
+        public string Fingerprint { get; init; } = string.Empty;
+        public string Message { get; init; } = string.Empty;
     }
 
     private sealed record ProtocolReadResult(string? Line, DateTimeOffset? CancellationDeadline);

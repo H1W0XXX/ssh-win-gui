@@ -98,6 +98,12 @@
                             <TextBlock Text="{DynamicResource ToolbarTunnel}" FontSize="11" HorizontalAlignment="Center" Margin="0,2,0,0" />
                         </StackPanel>
                     </Button>
+                    <Button Style="{StaticResource CommandTileButton}" ToolTip="{DynamicResource TipMachineTransfer}" Click="MachineTransferButton_OnClick">
+                        <StackPanel>
+                            <TextBlock Text="&#xE8AB;" FontFamily="Segoe MDL2 Assets" FontSize="21" Foreground="#1777BE" HorizontalAlignment="Center" />
+                            <TextBlock Text="{DynamicResource ToolbarMachineTransfer}" FontSize="11" HorizontalAlignment="Center" Margin="0,2,0,0" />
+                        </StackPanel>
+                    </Button>
             </StackPanel>
         </Border>
 

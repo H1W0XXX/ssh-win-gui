@@ -41,6 +41,7 @@ public partial class MainWindow : Window
     private int _nextTerminalNumber = 1;
     private int _nextTransferNumber = 1;
     private TunnelManagerWindow? _tunnelWindow;
+    private MachineTransferWindow? _machineTransferWindow;
     public MainWindow()
     {
         InitializeComponent();
@@ -287,6 +288,45 @@ public partial class MainWindow : Window
         };
         _tunnelWindow.Closed += (_, _) => _tunnelWindow = null;
         _tunnelWindow.Show();
+    }
+
+    private void MachineTransferButton_OnClick(object sender, RoutedEventArgs e)
+    {
+        if (_machineTransferWindow is { IsVisible: true })
+        {
+            _machineTransferWindow.Activate();
+            return;
+        }
+        _machineTransferWindow = new MachineTransferWindow(
+            _profiles,
+            _toolLocator.FindRsyncWorker(),
+            _hostKeyVerifier.Verify,
+            FindActivePrivateKeyAuthentication)
+        {
+            Owner = this,
+        };
+        _machineTransferWindow.Closed += (_, _) => _machineTransferWindow = null;
+        _machineTransferWindow.Show();
+    }
+
+    private SshAuthenticationOptions? FindActivePrivateKeyAuthentication(ConnectionProfile profile)
+    {
+        var terminal = _terminals.LastOrDefault(state =>
+            state.HostState == TerminalHostState.Connected &&
+            string.Equals(state.Profile.Id, profile.Id, StringComparison.Ordinal));
+        if (terminal is null)
+        {
+            return null;
+        }
+        try
+        {
+            var authentication = terminal.Surface.Authentication;
+            return authentication.Kind == SshAuthenticationKind.PrivateKey ? authentication : null;
+        }
+        catch (InvalidOperationException)
+        {
+            return null;
+        }
     }
 
     private async void EditSessionButton_OnClick(object sender, RoutedEventArgs e)

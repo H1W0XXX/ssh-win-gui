@@ -389,4 +389,40 @@ public sealed class CoreContractsTests
 
         Assert.True(request.Compress);
     }
+
+    [Fact]
+    public void NetworkDiscoveryFiltersContainerAndLoopbackInterfaces()
+    {
+        var script = RemoteNetworkDiscoveryService.BuildInventoryScript();
+
+        Assert.Contains("'docker'", script, StringComparison.Ordinal);
+        Assert.Contains("'veth'", script, StringComparison.Ordinal);
+        Assert.Contains("'cni'", script, StringComparison.Ordinal);
+        Assert.Contains("'flannel'", script, StringComparison.Ordinal);
+        Assert.Contains("'cali'", script, StringComparison.Ordinal);
+        Assert.Contains("'cilium'", script, StringComparison.Ordinal);
+        Assert.Contains("lowered == 'lo'", script, StringComparison.Ordinal);
+        Assert.Contains("10.0.0.0/8", script, StringComparison.Ordinal);
+        Assert.Contains("172.16.0.0/12", script, StringComparison.Ordinal);
+        Assert.Contains("192.168.0.0/16", script, StringComparison.Ordinal);
+        Assert.Contains("SSH_CONNECTION", script, StringComparison.Ordinal);
+        Assert.Contains("['ip', '-j', 'address', 'show']", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void NetworkDiscoveryParsesInterfaceAndActualSshPort()
+    {
+        var response = RemoteNetworkDiscoveryService.Marker +
+                       "{\"hostName\":\"node-a\",\"sshLocalAddress\":\"10.0.0.11\",\"sshLocalPort\":22," +
+                       "\"addresses\":[{\"interfaceName\":\"eno1\",\"address\":\"10.0.0.11\"," +
+                       "\"addressFamily\":4,\"prefixLength\":24}]}";
+
+        var inventory = RemoteNetworkDiscoveryService.ParseResponse(response);
+
+        Assert.Equal("node-a", inventory.HostName);
+        Assert.Equal(22, inventory.SshLocalPort);
+        var address = Assert.Single(inventory.Addresses);
+        Assert.Equal("eno1", address.InterfaceName);
+        Assert.Equal("10.0.0.11", address.Address);
+    }
 }

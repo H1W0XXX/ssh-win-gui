@@ -154,36 +154,13 @@ func buildAuthMethods(auth AuthConfig) ([]ssh.AuthMethod, error) {
 			}),
 		}, nil
 	case "private_key":
-		if auth.PrivateKeyPath == "" {
-			return nil, errorCode("invalid_request", errors.New("private_key authentication requires privateKeyPath"))
-		}
-		keyBytes, err := os.ReadFile(auth.PrivateKeyPath)
+		privateKey, err := parsePrivateKeyObject(auth)
 		if err != nil {
-			return nil, errorCode("authentication", fmt.Errorf("read private key: %w", err))
+			return nil, err
 		}
-		defer clearBytes(keyBytes)
-		var signer ssh.Signer
-		if bytes.HasPrefix(bytes.TrimSpace(keyBytes), []byte("PuTTY-User-Key-File-")) {
-			puttyKey, parseErr := putty.New(keyBytes)
-			if parseErr != nil {
-				return nil, errorCode("authentication", fmt.Errorf("parse PuTTY private key: %w", parseErr))
-			}
-			passphrase := []byte(auth.Passphrase)
-			defer clearBytes(passphrase)
-			rawKey, parseErr := puttyKey.ParseRawPrivateKey(passphrase)
-			if parseErr != nil {
-				return nil, errorCode("authentication", fmt.Errorf("decrypt PuTTY private key: %w", parseErr))
-			}
-			signer, err = ssh.NewSignerFromKey(rawKey)
-		} else if auth.Passphrase == "" {
-			signer, err = ssh.ParsePrivateKey(keyBytes)
-		} else {
-			passphrase := []byte(auth.Passphrase)
-			defer clearBytes(passphrase)
-			signer, err = ssh.ParsePrivateKeyWithPassphrase(keyBytes, passphrase)
-		}
+		signer, err := ssh.NewSignerFromKey(privateKey)
 		if err != nil {
-			return nil, errorCode("authentication", fmt.Errorf("parse private key: %w", err))
+			return nil, errorCode("authentication", fmt.Errorf("create private-key signer: %w", err))
 		}
 		return []ssh.AuthMethod{ssh.PublicKeys(signer)}, nil
 	case "agent", "keyboard_interactive", "certificate", "putty_session":
@@ -191,6 +168,44 @@ func buildAuthMethods(auth AuthConfig) ([]ssh.AuthMethod, error) {
 	default:
 		return nil, errorCode("unsupported_authentication", fmt.Errorf("authentication method %q is unsupported", auth.Method))
 	}
+}
+
+func parsePrivateKeyObject(auth AuthConfig) (any, error) {
+	if auth.PrivateKeyPath == "" {
+		return nil, errorCode("invalid_request", errors.New("private_key authentication requires privateKeyPath"))
+	}
+	keyBytes, err := os.ReadFile(auth.PrivateKeyPath)
+	if err != nil {
+		return nil, errorCode("authentication", fmt.Errorf("read private key: %w", err))
+	}
+	defer clearBytes(keyBytes)
+	if bytes.HasPrefix(bytes.TrimSpace(keyBytes), []byte("PuTTY-User-Key-File-")) {
+		puttyKey, parseErr := putty.New(keyBytes)
+		if parseErr != nil {
+			return nil, errorCode("authentication", fmt.Errorf("parse PuTTY private key: %w", parseErr))
+		}
+		passphrase := []byte(auth.Passphrase)
+		defer clearBytes(passphrase)
+		privateKey, parseErr := puttyKey.ParseRawPrivateKey(passphrase)
+		if parseErr != nil {
+			return nil, errorCode("authentication", fmt.Errorf("decrypt PuTTY private key: %w", parseErr))
+		}
+		return privateKey, nil
+	}
+	if auth.Passphrase == "" {
+		privateKey, parseErr := ssh.ParseRawPrivateKey(keyBytes)
+		if parseErr != nil {
+			return nil, errorCode("authentication", fmt.Errorf("parse private key: %w", parseErr))
+		}
+		return privateKey, nil
+	}
+	passphrase := []byte(auth.Passphrase)
+	defer clearBytes(passphrase)
+	privateKey, parseErr := ssh.ParseRawPrivateKeyWithPassphrase(keyBytes, passphrase)
+	if parseErr != nil {
+		return nil, errorCode("authentication", fmt.Errorf("decrypt private key: %w", parseErr))
+	}
+	return privateKey, nil
 }
 
 func buildHostKeyCallback(

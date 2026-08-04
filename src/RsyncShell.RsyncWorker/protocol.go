@@ -6,13 +6,15 @@ import (
 	"github.com/gokrazy/rsync"
 )
 
-const ipcProtocolVersion = 2
+const ipcProtocolVersion = 3
 
 type InboundMessage struct {
-	Type      string           `json:"type"`
-	RequestID string           `json:"requestId,omitempty"`
-	JobID     string           `json:"jobId,omitempty"`
-	Transfer  *TransferRequest `json:"transfer,omitempty"`
+	Type           string                 `json:"type"`
+	RequestID      string                 `json:"requestId,omitempty"`
+	JobID          string                 `json:"jobId,omitempty"`
+	Transfer       *TransferRequest       `json:"transfer,omitempty"`
+	RemoteTransfer *RemoteTransferRequest `json:"remoteTransfer,omitempty"`
+	RouteProbe     *RouteProbeRequest     `json:"routeProbe,omitempty"`
 }
 
 type TransferRequest struct {
@@ -22,6 +24,44 @@ type TransferRequest struct {
 	CopyContents bool            `json:"copyContents,omitempty"`
 	Remote       RemoteEndpoint  `json:"remote"`
 	Options      TransferOptions `json:"options,omitempty"`
+}
+
+type RemoteTransferRequest struct {
+	SourcePath              string          `json:"sourcePath"`
+	DestinationPath         string          `json:"destinationPath"`
+	CopyContents            bool            `json:"copyContents,omitempty"`
+	ExecutionSide           string          `json:"executionSide,omitempty"`
+	Source                  RemoteEndpoint  `json:"source"`
+	Destination             RemoteEndpoint  `json:"destination"`
+	Options                 TransferOptions `json:"options,omitempty"`
+	SourceTransferHost      string          `json:"sourceTransferHost,omitempty"`
+	SourceTransferPort      int             `json:"sourceTransferPort,omitempty"`
+	DestinationTransferHost string          `json:"destinationTransferHost,omitempty"`
+	DestinationTransferPort int             `json:"destinationTransferPort,omitempty"`
+}
+
+type RouteProbeRequest struct {
+	FirstHop   RemoteEndpoint   `json:"firstHop"`
+	Target     RemoteEndpoint   `json:"target"`
+	Candidates []RouteCandidate `json:"candidates"`
+}
+
+type RouteCandidate struct {
+	Host            string `json:"host"`
+	Port            int    `json:"port,omitempty"`
+	InterfaceName   string `json:"interfaceName,omitempty"`
+	IsSavedEndpoint bool   `json:"isSavedEndpoint,omitempty"`
+}
+
+type RouteProbeResult struct {
+	Host                string `json:"host"`
+	Port                int    `json:"port"`
+	InterfaceName       string `json:"interfaceName,omitempty"`
+	IsSavedEndpoint     bool   `json:"isSavedEndpoint,omitempty"`
+	Success             bool   `json:"success"`
+	LatencyMilliseconds int64  `json:"latencyMilliseconds"`
+	Fingerprint         string `json:"fingerprint,omitempty"`
+	Message             string `json:"message,omitempty"`
 }
 
 type RemoteEndpoint struct {
@@ -55,13 +95,15 @@ type HostKeyConfig struct {
 }
 
 type TransferOptions struct {
-	PreserveTimes       bool `json:"preserveTimes,omitempty"`
-	PreservePermissions bool `json:"preservePermissions,omitempty"`
-	PreserveLinks       bool `json:"preserveLinks,omitempty"`
-	Delete              bool `json:"delete,omitempty"`
-	DryRun              bool `json:"dryRun,omitempty"`
-	Compress            bool `json:"compress,omitempty"`
-	Partial             bool `json:"partial,omitempty"`
+	PreserveTimes       bool     `json:"preserveTimes,omitempty"`
+	PreservePermissions bool     `json:"preservePermissions,omitempty"`
+	PreserveLinks       bool     `json:"preserveLinks,omitempty"`
+	Delete              bool     `json:"delete,omitempty"`
+	DryRun              bool     `json:"dryRun,omitempty"`
+	Compress            bool     `json:"compress,omitempty"`
+	Partial             bool     `json:"partial,omitempty"`
+	BandwidthLimitKbps  int      `json:"bandwidthLimitKbps,omitempty"`
+	ExtraArguments      []string `json:"extraArguments,omitempty"`
 }
 
 type Capabilities struct {
@@ -78,21 +120,22 @@ type Capabilities struct {
 }
 
 type OutboundMessage struct {
-	Type            string        `json:"type"`
-	ProtocolVersion int           `json:"protocolVersion,omitempty"`
-	WorkerVersion   string        `json:"workerVersion,omitempty"`
-	Capabilities    *Capabilities `json:"capabilities,omitempty"`
-	RequestID       string        `json:"requestId,omitempty"`
-	JobID           string        `json:"jobId,omitempty"`
-	State           string        `json:"state,omitempty"`
-	Level           string        `json:"level,omitempty"`
-	Message         string        `json:"message,omitempty"`
-	Phase           string        `json:"phase,omitempty"`
-	ProtocolRead    int64         `json:"protocolReadBytes,omitempty"`
-	ProtocolWritten int64         `json:"protocolWrittenBytes,omitempty"`
-	Stats           *TransferStat `json:"stats,omitempty"`
-	Error           *WorkerError  `json:"error,omitempty"`
-	Timestamp       time.Time     `json:"timestamp"`
+	Type            string            `json:"type"`
+	ProtocolVersion int               `json:"protocolVersion,omitempty"`
+	WorkerVersion   string            `json:"workerVersion,omitempty"`
+	Capabilities    *Capabilities     `json:"capabilities,omitempty"`
+	RequestID       string            `json:"requestId,omitempty"`
+	JobID           string            `json:"jobId,omitempty"`
+	State           string            `json:"state,omitempty"`
+	Level           string            `json:"level,omitempty"`
+	Message         string            `json:"message,omitempty"`
+	Phase           string            `json:"phase,omitempty"`
+	ProtocolRead    int64             `json:"protocolReadBytes,omitempty"`
+	ProtocolWritten int64             `json:"protocolWrittenBytes,omitempty"`
+	Stats           *TransferStat     `json:"stats,omitempty"`
+	Error           *WorkerError      `json:"error,omitempty"`
+	Probe           *RouteProbeResult `json:"probe,omitempty"`
+	Timestamp       time.Time         `json:"timestamp"`
 }
 
 type TransferStat struct {
@@ -112,7 +155,7 @@ func helloMessage() OutboundMessage {
 		ProtocolVersion: ipcProtocolVersion,
 		WorkerVersion:   workerVersion,
 		Capabilities: &Capabilities{
-			Operations:        []string{"transfer", "cancel"},
+			Operations:        []string{"transfer", "remote_transfer", "probe_routes", "cancel"},
 			Directions:        []string{"upload", "download"},
 			Authentication:    []string{"password", "private_key"},
 			HostKeyModes:      []string{"known_hosts", "sha256", "log_only"},

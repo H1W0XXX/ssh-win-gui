@@ -1,0 +1,279 @@
+<Window x:Class="RsyncShell.App.Dialogs.MachineTransferWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="{DynamicResource MachineTransferTitle}"
+        Width="1260"
+        Height="820"
+        MinWidth="980"
+        MinHeight="640"
+        WindowStartupLocation="CenterOwner"
+        Closing="MachineTransferWindow_OnClosing"
+        UseLayoutRounding="True"
+        SnapsToDevicePixels="True">
+    <Window.Resources>
+        <Style x:Key="PanelBorder" TargetType="Border">
+            <Setter Property="Background" Value="White" />
+            <Setter Property="BorderBrush" Value="#D4D9DF" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="5" />
+            <Setter Property="Padding" Value="10" />
+        </Style>
+        <Style x:Key="PrimaryButton" TargetType="Button">
+            <Setter Property="Height" Value="36" />
+            <Setter Property="Padding" Value="18,4" />
+            <Setter Property="Background" Value="#176FC1" />
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="BorderBrush" Value="#115EAA" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+        <Style x:Key="EndpointListItem" TargetType="ListViewItem">
+            <Setter Property="Height" Value="26" />
+            <Setter Property="Padding" Value="3,0" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        </Style>
+    </Window.Resources>
+
+    <Grid Background="#F4F5F7" Margin="10">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="8" />
+            <RowDefinition Height="230" />
+        </Grid.RowDefinitions>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="5*" MinWidth="310" />
+            <ColumnDefinition Width="10" />
+            <ColumnDefinition Width="3*" MinWidth="250" />
+            <ColumnDefinition Width="10" />
+            <ColumnDefinition Width="5*" MinWidth="310" />
+        </Grid.ColumnDefinitions>
+
+        <Border Grid.Row="0" Grid.Column="0" Style="{StaticResource PanelBorder}">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <DockPanel Margin="0,0,0,8">
+                    <TextBlock Text="{DynamicResource EndpointA}" FontSize="17" FontWeight="SemiBold" />
+                    <TextBlock x:Name="AEndpointText" DockPanel.Dock="Right" Foreground="{StaticResource MutedTextBrush}" VerticalAlignment="Bottom" />
+                </DockPanel>
+                <ComboBox x:Name="AHostComboBox" Grid.Row="1" Height="30" Margin="0,0,0,7"
+                          DisplayMemberPath="DisplayName" SelectionChanged="EndpointHost_OnSelectionChanged" Tag="A" />
+                <Grid Grid.Row="2" Margin="0,0,0,7">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBox x:Name="APathTextBox" Height="29" VerticalContentAlignment="Center"
+                             KeyDown="EndpointPath_OnKeyDown" Tag="A" />
+                    <Button Grid.Column="1" Content="↑" Width="31" Height="29" Margin="4,0,0,0"
+                            ToolTip="{DynamicResource ParentDirectory}" Click="EndpointParent_OnClick" Tag="A" />
+                    <Button Grid.Column="2" Content="{DynamicResource Browse}" Height="29" Margin="4,0,0,0"
+                            Click="EndpointBrowse_OnClick" Tag="A" />
+                    <Button Grid.Column="3" Content="{DynamicResource Refresh}" Height="29" Margin="4,0,0,0"
+                            Click="EndpointRefresh_OnClick" Tag="A" />
+                </Grid>
+                <ListView x:Name="AFileList" Grid.Row="3" SelectionMode="Extended"
+                          ItemContainerStyle="{StaticResource EndpointListItem}"
+                          MouseDoubleClick="EndpointFileList_OnMouseDoubleClick" Tag="A">
+                    <ListView.View>
+                        <GridView>
+                            <GridViewColumn Header="{DynamicResource ColumnName}" Width="205">
+                                <GridViewColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="{Binding Glyph}" Width="23" />
+                                            <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </GridViewColumn.CellTemplate>
+                            </GridViewColumn>
+                            <GridViewColumn Header="{DynamicResource Modified}" DisplayMemberBinding="{Binding ModifiedDisplay}" Width="125" />
+                            <GridViewColumn Header="{DynamicResource Size}" DisplayMemberBinding="{Binding SizeDisplay}" Width="75" />
+                        </GridView>
+                    </ListView.View>
+                </ListView>
+                <DockPanel Grid.Row="4" Margin="0,7,0,0">
+                    <ProgressBar x:Name="AProgress" Width="85" Height="4" IsIndeterminate="True" Visibility="Collapsed" DockPanel.Dock="Right" />
+                    <TextBlock x:Name="AStatusText" Foreground="{StaticResource MutedTextBrush}" TextTrimming="CharacterEllipsis" />
+                </DockPanel>
+            </Grid>
+        </Border>
+
+        <Border Grid.Row="0" Grid.Column="2" Style="{StaticResource PanelBorder}">
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <StackPanel>
+                    <TextBlock Text="{DynamicResource TransferDirection}" FontWeight="SemiBold" Margin="0,0,0,5" />
+                    <Grid Margin="0,0,0,10">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <RadioButton x:Name="AToBRadio" Content="A → B" GroupName="Direction" IsChecked="True"
+                                     HorizontalContentAlignment="Center" Padding="8" Checked="Direction_OnChanged" />
+                        <RadioButton x:Name="BToARadio" Grid.Column="1" Content="A ← B" GroupName="Direction"
+                                     HorizontalContentAlignment="Center" Padding="8" Checked="Direction_OnChanged" />
+                    </Grid>
+
+                    <Button x:Name="DiscoverRoutesButton" Content="{DynamicResource DiscoverRoutes}"
+                            Height="34" Margin="0,0,0,6" Click="DiscoverRoutes_OnClick" />
+                    <Button x:Name="StartTransferButton" Content="{DynamicResource StartTransfer}"
+                            Style="{StaticResource PrimaryButton}" Click="StartTransfer_OnClick" />
+                    <Button Content="{DynamicResource PreviewCommand}" Height="32" Margin="0,6,0,14"
+                            Click="PreviewCommand_OnClick" />
+
+                    <TextBlock Text="{DynamicResource RemoteExecutionSide}" FontWeight="SemiBold" />
+                    <ComboBox x:Name="ExecutionSideComboBox" Height="29" Margin="0,4,0,12" DisplayMemberPath="DisplayName" />
+
+                    <TextBlock Text="{DynamicResource RsyncOptions}" FontSize="15" FontWeight="SemiBold" Margin="0,0,0,5" />
+                    <CheckBox x:Name="ArchiveCheckBox" Content="{DynamicResource ArchiveOption}" IsChecked="True" Margin="0,2" />
+                    <CheckBox x:Name="CompressCheckBox" Content="{DynamicResource CompressOption}" IsChecked="True" Margin="0,2" />
+                    <CheckBox x:Name="CopyContentsCheckBox" Content="{DynamicResource CopyDirectoryContents}" Margin="0,2" />
+                    <CheckBox x:Name="DeleteCheckBox" Content="{DynamicResource DeleteOption}" Margin="0,2" />
+                    <CheckBox x:Name="DryRunCheckBox" Content="{DynamicResource DryRunOption}" Margin="0,2,0,8" />
+
+                    <TextBlock Text="{DynamicResource BandwidthLimit}" />
+                    <TextBox x:Name="BandwidthTextBox" Text="0" Height="27" Margin="0,3,0,8" VerticalContentAlignment="Center" />
+                    <TextBlock Text="{DynamicResource ExtraArguments}" />
+                    <TextBox x:Name="ExtraArgumentsTextBox" Height="27" Margin="0,3,0,3" VerticalContentAlignment="Center" />
+                    <TextBlock Text="{DynamicResource ExtraArgumentsHint}" FontSize="11" Foreground="{StaticResource MutedTextBrush}" TextWrapping="Wrap" />
+                </StackPanel>
+            </ScrollViewer>
+        </Border>
+
+        <Border Grid.Row="0" Grid.Column="4" Style="{StaticResource PanelBorder}">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <DockPanel Margin="0,0,0,8">
+                    <TextBlock Text="{DynamicResource EndpointB}" FontSize="17" FontWeight="SemiBold" />
+                    <TextBlock x:Name="BEndpointText" DockPanel.Dock="Right" Foreground="{StaticResource MutedTextBrush}" VerticalAlignment="Bottom" />
+                </DockPanel>
+                <ComboBox x:Name="BHostComboBox" Grid.Row="1" Height="30" Margin="0,0,0,7"
+                          DisplayMemberPath="DisplayName" SelectionChanged="EndpointHost_OnSelectionChanged" Tag="B" />
+                <Grid Grid.Row="2" Margin="0,0,0,7">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBox x:Name="BPathTextBox" Height="29" VerticalContentAlignment="Center"
+                             KeyDown="EndpointPath_OnKeyDown" Tag="B" />
+                    <Button Grid.Column="1" Content="↑" Width="31" Height="29" Margin="4,0,0,0"
+                            ToolTip="{DynamicResource ParentDirectory}" Click="EndpointParent_OnClick" Tag="B" />
+                    <Button Grid.Column="2" Content="{DynamicResource Browse}" Height="29" Margin="4,0,0,0"
+                            Click="EndpointBrowse_OnClick" Tag="B" />
+                    <Button Grid.Column="3" Content="{DynamicResource Refresh}" Height="29" Margin="4,0,0,0"
+                            Click="EndpointRefresh_OnClick" Tag="B" />
+                </Grid>
+                <ListView x:Name="BFileList" Grid.Row="3" SelectionMode="Extended"
+                          ItemContainerStyle="{StaticResource EndpointListItem}"
+                          MouseDoubleClick="EndpointFileList_OnMouseDoubleClick" Tag="B">
+                    <ListView.View>
+                        <GridView>
+                            <GridViewColumn Header="{DynamicResource ColumnName}" Width="205">
+                                <GridViewColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="{Binding Glyph}" Width="23" />
+                                            <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </GridViewColumn.CellTemplate>
+                            </GridViewColumn>
+                            <GridViewColumn Header="{DynamicResource Modified}" DisplayMemberBinding="{Binding ModifiedDisplay}" Width="125" />
+                            <GridViewColumn Header="{DynamicResource Size}" DisplayMemberBinding="{Binding SizeDisplay}" Width="75" />
+                        </GridView>
+                    </ListView.View>
+                </ListView>
+                <DockPanel Grid.Row="4" Margin="0,7,0,0">
+                    <ProgressBar x:Name="BProgress" Width="85" Height="4" IsIndeterminate="True" Visibility="Collapsed" DockPanel.Dock="Right" />
+                    <TextBlock x:Name="BStatusText" Foreground="{StaticResource MutedTextBrush}" TextTrimming="CharacterEllipsis" />
+                </DockPanel>
+            </Grid>
+        </Border>
+
+        <Border Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="5" Style="{StaticResource PanelBorder}">
+            <TabControl x:Name="TransferTabs">
+                <TabItem x:Name="RouteProbeTab" Header="{DynamicResource RouteProbeResults}">
+                    <Grid Margin="6">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+                        <DockPanel Margin="0,0,0,6">
+                            <StackPanel Orientation="Horizontal" DockPanel.Dock="Right">
+                                <ProgressBar x:Name="RouteProbeProgress" Width="110" Height="5" IsIndeterminate="True"
+                                             Visibility="Collapsed" Margin="0,0,8,0" VerticalAlignment="Center" />
+                                <Button Content="{DynamicResource CopyProbeResults}" Padding="10,3" Click="CopyProbeResults_OnClick" />
+                            </StackPanel>
+                            <TextBlock x:Name="RouteProbeStatusText" Text="{DynamicResource RouteProbeNotRun}"
+                                       Foreground="{StaticResource MutedTextBrush}" TextTrimming="CharacterEllipsis" />
+                        </DockPanel>
+                        <ListView x:Name="RouteResultsList" Grid.Row="1" SelectionMode="Single"
+                                  SelectionChanged="RouteResultsList_OnSelectionChanged">
+                            <ListView.View>
+                                <GridView>
+                                    <GridViewColumn Header="{DynamicResource ExecuteOn}" DisplayMemberBinding="{Binding ExecuteOn}" Width="125" />
+                                    <GridViewColumn Header="{DynamicResource TargetSession}" DisplayMemberBinding="{Binding TargetSession}" Width="125" />
+                                    <GridViewColumn Header="{DynamicResource NetworkInterface}" DisplayMemberBinding="{Binding InterfaceName}" Width="100" />
+                                    <GridViewColumn Header="IP" DisplayMemberBinding="{Binding Host}" Width="145" />
+                                    <GridViewColumn Header="{DynamicResource Port}" DisplayMemberBinding="{Binding Port}" Width="60" />
+                                    <GridViewColumn Header="{DynamicResource Status}" DisplayMemberBinding="{Binding Status}" Width="80" />
+                                    <GridViewColumn Header="{DynamicResource Latency}" DisplayMemberBinding="{Binding LatencyDisplay}" Width="75" />
+                                    <GridViewColumn Header="{DynamicResource Fingerprint}" DisplayMemberBinding="{Binding Fingerprint}" Width="185" />
+                                    <GridViewColumn Header="{DynamicResource Details}" DisplayMemberBinding="{Binding Message}" Width="320" />
+                                </GridView>
+                            </ListView.View>
+                        </ListView>
+                    </Grid>
+                </TabItem>
+                <TabItem Header="{DynamicResource TransferJobs}">
+                    <Grid Margin="6">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+                        <DockPanel Margin="0,0,0,7">
+                            <StackPanel Orientation="Horizontal" DockPanel.Dock="Right">
+                                <Button Content="{DynamicResource CopyLog}" Padding="10,3" Margin="4,0" Click="CopyJobLog_OnClick" />
+                                <Button Content="{DynamicResource CancelSelectedJob}" Padding="10,3" Margin="4,0" Click="CancelSelectedJob_OnClick" />
+                            </StackPanel>
+                        </DockPanel>
+                        <Grid Grid.Row="1">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="3*" />
+                                <ColumnDefinition Width="7" />
+                                <ColumnDefinition Width="4*" />
+                            </Grid.ColumnDefinitions>
+                            <ListView x:Name="JobsList" SelectionChanged="JobsList_OnSelectionChanged">
+                                <ListView.View>
+                                    <GridView>
+                                        <GridViewColumn Header="#" DisplayMemberBinding="{Binding Number}" Width="42" />
+                                        <GridViewColumn Header="{DynamicResource Status}" DisplayMemberBinding="{Binding Status}" Width="85" />
+                                        <GridViewColumn Header="{DynamicResource Source}" DisplayMemberBinding="{Binding Source}" Width="230" />
+                                        <GridViewColumn Header="{DynamicResource Destination}" DisplayMemberBinding="{Binding Destination}" Width="230" />
+                                    </GridView>
+                                </ListView.View>
+                            </ListView>
+                            <TextBox x:Name="JobLogTextBox" Grid.Column="2" IsReadOnly="True" AcceptsReturn="True"
+                                     TextWrapping="NoWrap" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"
+                                     FontFamily="Cascadia Mono, Consolas" FontSize="11" Background="#151515" Foreground="#E8E8E8" />
+                        </Grid>
+                    </Grid>
+                </TabItem>
+            </TabControl>
+        </Border>
+    </Grid>
+</Window>

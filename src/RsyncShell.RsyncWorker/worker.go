@@ -110,6 +110,10 @@ func (w *Worker) handleLine(parent context.Context, line []byte) error {
 	switch msg.Type {
 	case "transfer":
 		return w.startTransfer(parent, msg)
+	case "remote_transfer":
+		return w.startRemoteTransfer(parent, msg)
+	case "probe_routes":
+		return w.startRouteProbe(parent, msg)
 	case "cancel":
 		return w.cancelTransfer(msg)
 	default:
@@ -142,6 +146,69 @@ func (w *Worker) startTransfer(parent context.Context, msg InboundMessage) error
 			Error:     publicError(err),
 		})
 	}
+	request := *msg.Transfer
+	return w.startJob(parent, msg.RequestID, func(ctx context.Context, reporter *jobReporter) (*TransferStat, error) {
+		return runTransfer(ctx, request, reporter)
+	})
+}
+
+func (w *Worker) startRemoteTransfer(parent context.Context, msg InboundMessage) error {
+	if msg.RequestID == "" {
+		return w.out.emit(OutboundMessage{
+			Type:  "error",
+			Error: &WorkerError{Code: "invalid_request", Message: "requestId is required"},
+		})
+	}
+	if msg.RemoteTransfer == nil {
+		return w.out.emit(OutboundMessage{
+			Type:      "error",
+			RequestID: msg.RequestID,
+			Error:     &WorkerError{Code: "invalid_request", Message: "remoteTransfer object is required"},
+		})
+	}
+	if err := validateRemoteTransferRequest(msg.RemoteTransfer); err != nil {
+		return w.out.emit(OutboundMessage{
+			Type:      "error",
+			RequestID: msg.RequestID,
+			Error:     publicError(err),
+		})
+	}
+	request := *msg.RemoteTransfer
+	return w.startJob(parent, msg.RequestID, func(ctx context.Context, reporter *jobReporter) (*TransferStat, error) {
+		return runRemoteTransfer(ctx, request, reporter)
+	})
+}
+
+func (w *Worker) startRouteProbe(parent context.Context, msg InboundMessage) error {
+	if msg.RequestID == "" {
+		return w.out.emit(OutboundMessage{
+			Type:  "error",
+			Error: &WorkerError{Code: "invalid_request", Message: "requestId is required"},
+		})
+	}
+	if msg.RouteProbe == nil {
+		return w.out.emit(OutboundMessage{
+			Type:      "error",
+			RequestID: msg.RequestID,
+			Error:     &WorkerError{Code: "invalid_request", Message: "routeProbe object is required"},
+		})
+	}
+	if err := validateRouteProbeRequest(msg.RouteProbe); err != nil {
+		return w.out.emit(OutboundMessage{
+			Type:      "error",
+			RequestID: msg.RequestID,
+			Error:     publicError(err),
+		})
+	}
+	request := *msg.RouteProbe
+	return w.startJob(parent, msg.RequestID, func(ctx context.Context, reporter *jobReporter) (*TransferStat, error) {
+		return runRouteProbe(ctx, request, reporter)
+	})
+}
+
+type jobRunner func(context.Context, *jobReporter) (*TransferStat, error)
+
+func (w *Worker) startJob(parent context.Context, requestID string, run jobRunner) error {
 
 	jobID, err := newJobID()
 	if err != nil {
@@ -154,7 +221,7 @@ func (w *Worker) startTransfer(parent context.Context, msg InboundMessage) error
 
 	if err := w.out.emit(OutboundMessage{
 		Type:      "state",
-		RequestID: msg.RequestID,
+		RequestID: requestID,
 		JobID:     jobID,
 		State:     "queued",
 	}); err != nil {
@@ -167,19 +234,19 @@ func (w *Worker) startTransfer(parent context.Context, msg InboundMessage) error
 	go func() {
 		defer w.wg.Done()
 		defer cancel()
-		w.runJob(jobCtx, jobID, w.job(jobID), *msg.Transfer)
+		w.runJob(jobCtx, jobID, w.job(jobID), run)
 	}()
 	return nil
 }
 
-func (w *Worker) runJob(ctx context.Context, jobID string, job *activeJob, req TransferRequest) {
+func (w *Worker) runJob(ctx context.Context, jobID string, job *activeJob, run jobRunner) {
 	reporter := &jobReporter{jobID: jobID, out: w.out}
 	job.mu.Lock()
 	if ctx.Err() == nil && !job.terminal {
 		reporter.state("running")
 	}
 	job.mu.Unlock()
-	stats, err := runTransfer(ctx, req, reporter)
+	stats, err := run(ctx, reporter)
 	if err == nil {
 		w.finishJob(jobID, job, OutboundMessage{
 			Type:  "completed",
@@ -328,4 +395,8 @@ func (r *jobReporter) progress(phase string, read, written int64) {
 		ProtocolRead:    read,
 		ProtocolWritten: written,
 	})
+}
+
+func (r *jobReporter) probe(result RouteProbeResult) {
+	_ = r.out.emit(OutboundMessage{Type: "probe_result", JobID: r.jobID, Probe: &result})
 }

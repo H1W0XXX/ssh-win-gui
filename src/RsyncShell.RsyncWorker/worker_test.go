@@ -50,6 +50,9 @@ func TestHelloDeclaresSecurityAndTransferLimits(t *testing.T) {
 	if !contains(msg.Capabilities.HostKeyModes, "log_only") {
 		t.Fatalf("log_only host-key mode is not advertised: %q", msg.Capabilities.HostKeyModes)
 	}
+	if !contains(msg.Capabilities.Operations, "remote_transfer") || !contains(msg.Capabilities.Operations, "probe_routes") {
+		t.Fatalf("machine-transfer operations are not advertised: %q", msg.Capabilities.Operations)
+	}
 }
 
 func TestValidateTransferRejectsUnsupportedFeatures(t *testing.T) {
@@ -256,6 +259,50 @@ func TestBuildRsyncArgsIsAllowlisted(t *testing.T) {
 	}
 }
 
+func TestRouteProbeRequiresPrivateKeysAndValidCandidates(t *testing.T) {
+	req := RouteProbeRequest{
+		FirstHop: validRequest().Remote,
+		Target:   validRequest().Remote,
+		Candidates: []RouteCandidate{
+			{Host: "10.0.0.12", Port: 22, InterfaceName: "eno1"},
+		},
+	}
+	if err := validateRouteProbeRequest(&req); err != nil {
+		t.Fatalf("valid private-key route probe rejected: %v", err)
+	}
+
+	req.Target.Auth = AuthConfig{Method: "password", Password: "secret"}
+	assertErrorCode(t, validateRouteProbeRequest(&req), "unsupported_authentication")
+
+	req.Target = validRequest().Remote
+	req.Candidates[0].Port = 0
+	assertErrorCode(t, validateRouteProbeRequest(&req), "invalid_request")
+}
+
+func TestRemoteTransferAcceptsDiscoveredAddressOverrides(t *testing.T) {
+	request := RemoteTransferRequest{
+		SourcePath:              "/srv/source",
+		DestinationPath:         "/srv/destination",
+		ExecutionSide:           "source",
+		Source:                  validRequest().Remote,
+		Destination:             validRequest().Remote,
+		DestinationTransferHost: "10.0.0.12",
+		DestinationTransferPort: 22,
+	}
+	if err := validateRemoteTransferRequest(&request); err != nil {
+		t.Fatalf("valid transfer override rejected: %v", err)
+	}
+	request.DestinationTransferHost = "bad\naddress"
+	assertErrorCode(t, validateRemoteTransferRequest(&request), "invalid_request")
+}
+
+func TestProbeFingerprintParser(t *testing.T) {
+	output := "[inner-host-key] 256 SHA256:abc123 host (ED25519)\n__SSH_WIN_GUI_ROUTE_OK__\n"
+	if got := parseProbeFingerprint(output); got != "SHA256:abc123" {
+		t.Fatalf("fingerprint = %q", got)
+	}
+}
+
 func validRequest() TransferRequest {
 	return TransferRequest{
 		Direction:  "upload",
@@ -265,7 +312,7 @@ func validRequest() TransferRequest {
 			Host:    "example.test",
 			Port:    22,
 			User:    "user",
-			Auth:    AuthConfig{Method: "password", Password: "secret"},
+			Auth:    AuthConfig{Method: "private_key", PrivateKeyPath: `C:\test\id_ed25519`},
 			HostKey: HostKeyConfig{Mode: "log_only"},
 		},
 	}

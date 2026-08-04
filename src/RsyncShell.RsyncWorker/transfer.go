@@ -45,7 +45,25 @@ func validateTransferRequest(req *TransferRequest) error {
 	if req.Options.Delete {
 		return errorCode("unsupported_option", errors.New("delete is disabled because the pinned Go rsync implementation does not reliably forward it to the remote receiver"))
 	}
+	if err := validateTransferOptions(req.Options); err != nil {
+		return err
+	}
 	return validateSecurityConfig(req.Remote)
+}
+
+func validateTransferOptions(options TransferOptions) error {
+	if options.BandwidthLimitKbps < 0 {
+		return errorCode("invalid_request", errors.New("bandwidthLimitKbps must be zero or greater"))
+	}
+	if len(options.ExtraArguments) > 32 {
+		return errorCode("invalid_request", errors.New("at most 32 extra rsync arguments are allowed"))
+	}
+	for _, argument := range options.ExtraArguments {
+		if argument == "" || len(argument) > 512 || strings.ContainsAny(argument, "\x00\r\n") {
+			return errorCode("invalid_request", errors.New("extra rsync arguments must be non-empty, at most 512 bytes, and contain no NUL or line breaks"))
+		}
+	}
+	return nil
 }
 
 func validateSecurityConfig(remote RemoteEndpoint) error {
@@ -212,6 +230,10 @@ func buildRsyncArgs(options TransferOptions) []string {
 	if options.Compress {
 		args = append(args, "-z")
 	}
+	if options.BandwidthLimitKbps > 0 {
+		args = append(args, fmt.Sprintf("--bwlimit=%d", options.BandwidthLimitKbps))
+	}
+	args = append(args, options.ExtraArguments...)
 	return args
 }
 
