@@ -298,6 +298,8 @@
     <sys:String x:Key="SelectSuccessfulRoute">This route is unavailable. Select a route marked Available.</sys:String>
     <sys:String x:Key="SelectedRoute">Selected: execute on {0} and connect to the other endpoint through {1}:{2}.</sys:String>
     <sys:String x:Key="SavedEndpoint">Saved endpoint</sys:String>
+    <sys:String x:Key="SavedDirectEndpoint">Saved endpoint (direct)</sys:String>
+    <sys:String x:Key="SavedJumpRoute">Saved SSH jump route</sys:String>
     <sys:String x:Key="SelectBothEndpoints">Select both endpoints.</sys:String>
     <sys:String x:Key="LocalToLocalNotSupported">Machine transfer does not handle local-to-local copies.</sys:String>
     <sys:String x:Key="EnterBothPaths">Enter both source and destination paths.</sys:String>

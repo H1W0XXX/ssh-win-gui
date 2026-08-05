@@ -423,7 +423,7 @@ public partial class MachineTransferWindow : Window
         }
     }
 
-    private static IReadOnlyList<RemoteNetworkAddressCandidate> BuildRouteCandidates(
+    internal static IReadOnlyList<RemoteNetworkAddressCandidate> BuildRouteCandidates(
         ConnectionProfile profile,
         RemoteNetworkInventory inventory)
     {
@@ -437,14 +437,31 @@ public partial class MachineTransferWindow : Window
             {
                 Host = profile.Host,
                 Port = profile.Port,
-                InterfaceName = LocalizationService.Get("SavedEndpoint"),
+                InterfaceName = LocalizationService.Get("SavedDirectEndpoint"),
                 IsSavedEndpoint = true,
-            })
-            .GroupBy(candidate => $"{candidate.Host}\0{candidate.Port}", StringComparer.OrdinalIgnoreCase)
-            .Select(group => group.OrderBy(candidate => candidate.IsSavedEndpoint).First())
+            });
+        if (profile.ProxyKind == SshProxyKind.JumpHost)
+        {
+            candidates = candidates.Append(new RemoteNetworkAddressCandidate
+            {
+                Host = profile.Host,
+                Port = profile.Port,
+                InterfaceName = LocalizationService.Get("SavedJumpRoute"),
+                IsSavedEndpoint = true,
+                UseTargetProxy = true,
+            });
+        }
+        return candidates
+            .GroupBy(
+                candidate => $"{candidate.Host}\0{candidate.Port}\0{candidate.UseTargetProxy}",
+                StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.OrderByDescending(candidate => candidate.IsSavedEndpoint).First())
+            .OrderByDescending(candidate => candidate.IsSavedEndpoint)
+            .ThenByDescending(candidate => candidate.UseTargetProxy)
+            .ThenBy(candidate => candidate.InterfaceName, StringComparer.CurrentCultureIgnoreCase)
+            .ThenBy(candidate => candidate.Host, StringComparer.OrdinalIgnoreCase)
             .Take(32)
             .ToArray();
-        return candidates;
     }
 
     private static IEnumerable<RouteProbeChoice> BuildRouteRows(
@@ -461,6 +478,7 @@ public partial class MachineTransferWindow : Window
             result.InterfaceName,
             result.Host,
             result.Port,
+            result.UseTargetProxy,
             result.Success,
             result.LatencyMilliseconds,
             result.Fingerprint,
@@ -740,16 +758,20 @@ public partial class MachineTransferWindow : Window
                     DryRun = specification.Options.DryRun,
                     BandwidthLimitKbps = specification.Options.BandwidthLimitKbps,
                     ExtraArguments = specification.Options.ExtraArguments,
-                    SourceTransferHost = specification.ExecutionSide == RsyncRemoteTransferExecutionSide.Destination
+                    SourceTransferHost = specification.ExecutionSide == RsyncRemoteTransferExecutionSide.Destination &&
+                                         _selectedRoute is { UseTargetProxy: false }
                         ? _selectedRoute?.Host
                         : null,
-                    SourceTransferPort = specification.ExecutionSide == RsyncRemoteTransferExecutionSide.Destination
+                    SourceTransferPort = specification.ExecutionSide == RsyncRemoteTransferExecutionSide.Destination &&
+                                         _selectedRoute is { UseTargetProxy: false }
                         ? _selectedRoute?.Port ?? 0
                         : 0,
-                    DestinationTransferHost = specification.ExecutionSide == RsyncRemoteTransferExecutionSide.Source
+                    DestinationTransferHost = specification.ExecutionSide == RsyncRemoteTransferExecutionSide.Source &&
+                                              _selectedRoute is { UseTargetProxy: false }
                         ? _selectedRoute?.Host
                         : null,
-                    DestinationTransferPort = specification.ExecutionSide == RsyncRemoteTransferExecutionSide.Source
+                    DestinationTransferPort = specification.ExecutionSide == RsyncRemoteTransferExecutionSide.Source &&
+                                              _selectedRoute is { UseTargetProxy: false }
                         ? _selectedRoute?.Port ?? 0
                         : 0,
                 }, job.Cancellation.Token);
@@ -1270,6 +1292,7 @@ public partial class MachineTransferWindow : Window
         string InterfaceName,
         string Host,
         int Port,
+        bool UseTargetProxy,
         bool Success,
         long LatencyMilliseconds,
         string Fingerprint,

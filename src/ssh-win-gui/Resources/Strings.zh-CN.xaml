@@ -298,6 +298,8 @@
     <sys:String x:Key="SelectSuccessfulRoute">这条路径不可用，请选择状态为“可用”的路径。</sys:String>
     <sys:String x:Key="SelectedRoute">已选择：在 {0} 执行，通过 {1}:{2} 连接另一端。</sys:String>
     <sys:String x:Key="SavedEndpoint">保存地址</sys:String>
+    <sys:String x:Key="SavedDirectEndpoint">保存地址（直连）</sys:String>
+    <sys:String x:Key="SavedJumpRoute">保存的 SSH 跳板</sys:String>
     <sys:String x:Key="SelectBothEndpoints">请选择两个端点。</sys:String>
     <sys:String x:Key="LocalToLocalNotSupported">机器传输不处理本地到本地复制。</sys:String>
     <sys:String x:Key="EnterBothPaths">请输入源路径和目标路径。</sys:String>

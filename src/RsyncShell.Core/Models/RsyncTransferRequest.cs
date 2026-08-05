@@ -65,6 +65,7 @@ public sealed record RemoteNetworkAddressCandidate
     public int Port { get; init; } = 22;
     public required string InterfaceName { get; init; }
     public bool IsSavedEndpoint { get; init; }
+    public bool UseTargetProxy { get; init; }
 }
 
 public sealed record RsyncRemoteRouteProbeRequest
@@ -84,6 +85,7 @@ public sealed record RsyncRemoteRouteProbeResult
     public int Port { get; init; }
     public required string InterfaceName { get; init; }
     public bool IsSavedEndpoint { get; init; }
+    public bool UseTargetProxy { get; init; }
     public bool Success { get; init; }
     public long LatencyMilliseconds { get; init; }
     public string Fingerprint { get; init; } = string.Empty;

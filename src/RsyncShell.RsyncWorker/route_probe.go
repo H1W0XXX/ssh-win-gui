@@ -69,9 +69,7 @@ func runRouteProbe(ctx context.Context, req RouteProbeRequest, reporter *jobRepo
 	defer firstHop.Close()
 	reporter.log("warning", "SSH first hop connected without host-key verification")
 
-	directTarget := req.Target
-	directTarget.Proxy = nil
-	keyring, _, err := buildForwardedKeyring(directTarget)
+	keyring, _, err := buildForwardedKeyring(req.Target)
 	if err != nil {
 		return nil, err
 	}
@@ -103,7 +101,7 @@ func runRouteProbe(ctx context.Context, req RouteProbeRequest, reporter *jobRepo
 			case <-probeContext.Done():
 				return
 			}
-			result := probeRouteCandidate(probeContext, firstHop, directTarget, candidate)
+			result := probeRouteCandidate(probeContext, firstHop, req.Target, candidate)
 			reporter.probe(result)
 		}()
 	}
@@ -126,12 +124,11 @@ func probeRouteCandidate(
 		Port:            candidate.Port,
 		InterfaceName:   candidate.InterfaceName,
 		IsSavedEndpoint: candidate.IsSavedEndpoint,
+		UseTargetProxy:  candidate.UseTargetProxy,
 	}
 	candidateContext, cancel := context.WithTimeout(ctx, 9*time.Second)
 	defer cancel()
-	target.Host = candidate.Host
-	target.Port = candidate.Port
-	target.Proxy = nil
+	target = targetForRouteCandidate(target, candidate)
 
 	session, err := firstHop.NewSession()
 	if err != nil {
@@ -186,6 +183,16 @@ func probeRouteCandidate(
 	}
 	result.Message = message
 	return result
+}
+
+func targetForRouteCandidate(target RemoteEndpoint, candidate RouteCandidate) RemoteEndpoint {
+	if candidate.UseTargetProxy {
+		return target
+	}
+	target.Host = candidate.Host
+	target.Port = candidate.Port
+	target.Proxy = nil
+	return target
 }
 
 func parseProbeFingerprint(output string) string {

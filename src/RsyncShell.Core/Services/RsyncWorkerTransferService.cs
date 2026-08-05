@@ -97,6 +97,7 @@ public sealed class RsyncWorkerTransferService
                             Port = message.Probe.Port,
                             InterfaceName = message.Probe.InterfaceName,
                             IsSavedEndpoint = message.Probe.IsSavedEndpoint,
+                            UseTargetProxy = message.Probe.UseTargetProxy,
                             Success = message.Probe.Success,
                             LatencyMilliseconds = message.Probe.LatencyMilliseconds,
                             Fingerprint = message.Probe.Fingerprint,
@@ -396,6 +397,7 @@ public sealed class RsyncWorkerTransferService
                     candidate.Port,
                     candidate.InterfaceName,
                     candidate.IsSavedEndpoint,
+                    candidate.UseTargetProxy,
                 }),
             },
         };
@@ -604,6 +606,7 @@ public sealed class RsyncWorkerTransferService
         public int Port { get; init; }
         public string InterfaceName { get; init; } = string.Empty;
         public bool IsSavedEndpoint { get; init; }
+        public bool UseTargetProxy { get; init; }
         public bool Success { get; init; }
         public long LatencyMilliseconds { get; init; }
         public string Fingerprint { get; init; } = string.Empty;

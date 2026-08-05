@@ -336,6 +336,27 @@ func TestProbeFingerprintParser(t *testing.T) {
 	}
 }
 
+func TestRouteCandidateKeepsSavedJumpOnlyWhenRequested(t *testing.T) {
+	jump := validRequest().Remote
+	jump.Host = "jump.example.test"
+	target := validRequest().Remote
+	target.Proxy = &ProxyConfig{Type: "jump", Jump: &jump}
+
+	direct := targetForRouteCandidate(target, RouteCandidate{Host: "10.0.0.12", Port: 2222})
+	if direct.Host != "10.0.0.12" || direct.Port != 2222 || direct.Proxy != nil {
+		t.Fatalf("direct candidate did not replace target route: %#v", direct)
+	}
+
+	savedJump := targetForRouteCandidate(target, RouteCandidate{
+		Host:           target.Host,
+		Port:           target.Port,
+		UseTargetProxy: true,
+	})
+	if savedJump.Host != target.Host || savedJump.Port != target.Port || savedJump.Proxy == nil || savedJump.Proxy.Jump == nil {
+		t.Fatalf("saved jump candidate did not preserve target route: %#v", savedJump)
+	}
+}
+
 func validRequest() TransferRequest {
 	return TransferRequest{
 		Direction:  "upload",

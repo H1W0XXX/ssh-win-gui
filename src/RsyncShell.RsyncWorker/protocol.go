@@ -51,6 +51,7 @@ type RouteCandidate struct {
 	Port            int    `json:"port,omitempty"`
 	InterfaceName   string `json:"interfaceName,omitempty"`
 	IsSavedEndpoint bool   `json:"isSavedEndpoint,omitempty"`
+	UseTargetProxy  bool   `json:"useTargetProxy,omitempty"`
 }
 
 type RouteProbeResult struct {
@@ -58,6 +59,7 @@ type RouteProbeResult struct {
 	Port                int    `json:"port"`
 	InterfaceName       string `json:"interfaceName,omitempty"`
 	IsSavedEndpoint     bool   `json:"isSavedEndpoint,omitempty"`
+	UseTargetProxy      bool   `json:"useTargetProxy,omitempty"`
 	Success             bool   `json:"success"`
 	LatencyMilliseconds int64  `json:"latencyMilliseconds"`
 	Fingerprint         string `json:"fingerprint,omitempty"`
