@@ -14,8 +14,8 @@
     <Grid Background="{StaticResource ChromeBrush}">
         <Grid.RowDefinitions>
             <RowDefinition Height="25" />
-            <RowDefinition Height="57" />
-            <RowDefinition Height="35" />
+            <RowDefinition Height="52" />
+            <RowDefinition Height="38" />
             <RowDefinition Height="*" />
             <RowDefinition Height="23" />
         </Grid.RowDefinitions>
@@ -26,9 +26,10 @@
         </Grid.ColumnDefinitions>
 
         <Menu Grid.Row="0" Grid.ColumnSpan="3"
-              Background="White"
-              BorderBrush="#D5D8DC"
+              Background="{StaticResource SurfaceBrush}"
+              BorderBrush="{StaticResource ChromeBorderBrush}"
               BorderThickness="0,0,0,1"
+              Foreground="{StaticResource TextBrush}"
               Padding="2,0">
             <MenuItem Header="{DynamicResource MenuTerminal}">
                 <MenuItem Header="{DynamicResource NewSshSession}" Click="NewSessionButton_OnClick" />
@@ -82,25 +83,25 @@
         </Menu>
 
         <Border Grid.Row="1" Grid.ColumnSpan="3"
-                Background="White"
-                BorderBrush="#D2D6DA"
+                Background="{StaticResource SurfaceBrush}"
+                BorderBrush="{StaticResource ChromeBorderBrush}"
                 BorderThickness="0,0,0,1">
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" Margin="7,1,0,1">
                     <Button Style="{StaticResource CommandTileButton}" ToolTip="{DynamicResource TipNewSession}" Click="NewSessionButton_OnClick">
                         <StackPanel>
-                            <TextBlock Text="&#xE710;" FontFamily="Segoe MDL2 Assets" FontSize="21" Foreground="#1777BE" HorizontalAlignment="Center" />
+                            <TextBlock Text="&#xE710;" FontFamily="Segoe MDL2 Assets" FontSize="19" Foreground="{StaticResource AccentBrush}" HorizontalAlignment="Center" />
                             <TextBlock Text="{DynamicResource ToolbarSession}" FontSize="11" HorizontalAlignment="Center" Margin="0,2,0,0" />
                         </StackPanel>
                     </Button>
                     <Button Style="{StaticResource CommandTileButton}" ToolTip="{DynamicResource TipTunnelManager}" Click="TunnelButton_OnClick">
                         <StackPanel>
-                            <TextBlock Text="&#xE968;" FontFamily="Segoe MDL2 Assets" FontSize="21" Foreground="#1777BE" HorizontalAlignment="Center" />
+                            <TextBlock Text="&#xE968;" FontFamily="Segoe MDL2 Assets" FontSize="19" Foreground="{StaticResource AccentBrush}" HorizontalAlignment="Center" />
                             <TextBlock Text="{DynamicResource ToolbarTunnel}" FontSize="11" HorizontalAlignment="Center" Margin="0,2,0,0" />
                         </StackPanel>
                     </Button>
                     <Button Style="{StaticResource CommandTileButton}" ToolTip="{DynamicResource TipMachineTransfer}" Click="MachineTransferButton_OnClick">
                         <StackPanel>
-                            <TextBlock Text="&#xE8AB;" FontFamily="Segoe MDL2 Assets" FontSize="21" Foreground="#1777BE" HorizontalAlignment="Center" />
+                            <TextBlock Text="&#xE8AB;" FontFamily="Segoe MDL2 Assets" FontSize="19" Foreground="{StaticResource AccentBrush}" HorizontalAlignment="Center" />
                             <TextBlock Text="{DynamicResource ToolbarMachineTransfer}" FontSize="11" HorizontalAlignment="Center" Margin="0,2,0,0" />
                         </StackPanel>
                     </Button>
@@ -108,7 +109,7 @@
         </Border>
 
         <Border Grid.Row="2" Grid.Column="2"
-                Background="{StaticResource ChromeBrush}"
+                Background="{StaticResource SurfaceMutedBrush}"
                 BorderBrush="{StaticResource ChromeBorderBrush}"
                 BorderThickness="0,0,0,1">
             <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
@@ -140,11 +141,11 @@
                       Width="5"
                       HorizontalAlignment="Stretch"
                       VerticalAlignment="Stretch"
-                      Background="#D8DCE1"
+                      Background="{StaticResource ChromeBorderBrush}"
                       ResizeBehavior="PreviousAndNext" />
 
         <Border Grid.Row="2" Grid.RowSpan="2" Grid.Column="0"
-                Background="White"
+                Background="{StaticResource SurfaceBrush}"
                 BorderBrush="{StaticResource ChromeBorderBrush}"
                 BorderThickness="0,0,1,0">
             <Grid>
@@ -153,7 +154,7 @@
                     <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
 
-                <Border Grid.Column="0" Background="#F0F2F4" BorderBrush="#D6DADE" BorderThickness="0,0,1,0">
+                <Border Grid.Column="0" Background="{StaticResource SurfaceMutedBrush}" BorderBrush="{StaticResource ChromeBorderBrush}" BorderThickness="0,0,1,0">
                     <StackPanel>
                         <ToggleButton x:Name="SessionsRailButton"
                                       Style="{StaticResource RailButton}"
@@ -181,7 +182,7 @@
                             <RowDefinition Height="*" />
                             <RowDefinition Height="Auto" />
                         </Grid.RowDefinitions>
-                        <Grid Background="#F8F9FA">
+                        <Grid Background="{StaticResource SurfaceSubtleBrush}">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
@@ -395,11 +396,14 @@
                 <RowDefinition Height="0" />
             </Grid.RowDefinitions>
             <Grid x:Name="TerminalStage">
-                <Grid x:Name="HomeView" Background="#F4F5F7">
+                <Grid x:Name="HomeView" Background="{StaticResource ChromeBrush}">
                     <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                        <TextBlock Text="ssh-win-gui" Foreground="#263646" FontSize="32" FontWeight="SemiBold" HorizontalAlignment="Center" />
+                        <Border Width="58" Height="58" CornerRadius="14" Background="{StaticResource AccentSoftBrush}" HorizontalAlignment="Center" Margin="0,0,0,14">
+                            <TextBlock Text="&#xE756;" FontFamily="Segoe MDL2 Assets" FontSize="26" Foreground="{StaticResource AccentBrush}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <TextBlock Text="ssh-win-gui" Foreground="{StaticResource TextBrush}" FontSize="30" FontWeight="SemiBold" HorizontalAlignment="Center" />
                         <TextBlock Text="{DynamicResource HomeSubtitle}"
-                                   Foreground="#697887"
+                                   Foreground="{StaticResource MutedTextBrush}"
                                    FontSize="15"
                                    Margin="0,6,0,0"
                                    HorizontalAlignment="Center" />
@@ -409,8 +413,8 @@
             <Border x:Name="RemoteMonitoringPanel"
                     Grid.Row="1"
                     Visibility="Collapsed"
-                    Background="#F7F8F9"
-                    BorderBrush="#C9CED4"
+                    Background="{StaticResource SurfaceSubtleBrush}"
+                    BorderBrush="{StaticResource ChromeBorderBrush}"
                     BorderThickness="0,1,0,0">
                 <StackPanel>
                     <Grid Height="26">
@@ -496,7 +500,7 @@
                     </Border>
                 </StackPanel>
             </Border>
-            <Border Grid.Row="2" Visibility="Collapsed" Background="#ECEFF2" BorderBrush="#C9CED4" BorderThickness="0,1,0,0">
+            <Border Grid.Row="2" Visibility="Collapsed" Background="{StaticResource SurfaceMutedBrush}" BorderBrush="{StaticResource ChromeBorderBrush}" BorderThickness="0,1,0,0">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
@@ -514,7 +518,7 @@
             </Border>
         </Grid>
 
-        <Border Grid.Row="4" Grid.ColumnSpan="3" Background="#F3F4F6" BorderBrush="#C9CED4" BorderThickness="0,1,0,0" Padding="7,2">
+        <Border Grid.Row="4" Grid.ColumnSpan="3" Background="{StaticResource SurfaceSubtleBrush}" BorderBrush="{StaticResource ChromeBorderBrush}" BorderThickness="0,1,0,0" Padding="9,2">
             <DockPanel>
                 <TextBlock x:Name="ToolStatusText" DockPanel.Dock="Right" Foreground="#687380" />
                 <TextBlock Text="{DynamicResource FooterSummary}" Foreground="#687380" />

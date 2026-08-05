@@ -58,7 +58,11 @@
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <TextBox x:Name="PrivateKeyInput" Padding="7,4" />
+                <ComboBox x:Name="PrivateKeyInput"
+                          Padding="7,4"
+                          IsEditable="True"
+                          IsTextSearchEnabled="True"
+                          StaysOpenOnEdit="True" />
                 <Button Grid.Column="1" Content="{DynamicResource Browse}" Margin="7,0,0,0" Padding="11,4" Click="BrowseButton_OnClick" />
             </Grid>
 

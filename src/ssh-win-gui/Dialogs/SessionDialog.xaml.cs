@@ -21,9 +21,10 @@ public partial class SessionDialog : System.Windows.Window
         NameInput.Text = existing?.Name ?? string.Empty;
         HostInput.Text = existing?.Host ?? string.Empty;
         PortInput.Text = (existing?.Port ?? 22).ToString(CultureInfo.InvariantCulture);
-        UsernameInput.Text = existing?.Username ?? Environment.UserName;
+        UsernameInput.Text = existing?.Username ?? "root";
         GroupInput.ItemsSource = BuildGroupChoices(_savedProfiles, existing?.Group);
         GroupInput.Text = existing?.Group ?? "Sessions";
+        PrivateKeyInput.ItemsSource = BuildPrivateKeyChoices(_savedProfiles, existing?.PrivateKeyPath);
         PrivateKeyInput.Text = existing?.PrivateKeyPath ?? string.Empty;
         FavoriteInput.IsChecked = existing?.Favorite ?? false;
         ProxyTypeInput.Items.Add(new ProxyChoice(SshProxyKind.None, LocalizationService.Get("ProxyNone")));
@@ -31,7 +32,7 @@ public partial class SessionDialog : System.Windows.Window
         ProxyTypeInput.Items.Add(new ProxyChoice(SshProxyKind.JumpHost, LocalizationService.Get("ProxyJumpHost")));
         ProxyTypeInput.DisplayMemberPath = nameof(ProxyChoice.Display);
         ProxyTypeInput.SelectedIndex = (int)(existing?.ProxyKind ?? SshProxyKind.None);
-        ProxyHostInput.Text = existing?.ProxyHost ?? string.Empty;
+        ProxyHostInput.Text = existing?.ProxyHost ?? "127.0.0.1";
         ProxyPortInput.Text = (existing?.ProxyPort ?? 1080).ToString(CultureInfo.InvariantCulture);
         var currentId = existing?.Id ?? Guid.NewGuid().ToString("N", CultureInfo.InvariantCulture);
         foreach (var candidate in _savedProfiles.Where(candidate =>
@@ -101,6 +102,43 @@ public partial class SessionDialog : System.Windows.Window
             .ThenBy(group => group, StringComparer.CurrentCultureIgnoreCase)
             .ToArray();
         return groups;
+    }
+
+    internal static IReadOnlyList<string> BuildPrivateKeyChoices(
+        IEnumerable<ConnectionProfile> savedProfiles,
+        string? currentPrivateKeyPath = null,
+        string? userProfilePath = null)
+    {
+        var choices = new List<string>();
+
+        AddChoice(currentPrivateKeyPath);
+        foreach (var profile in savedProfiles)
+        {
+            AddChoice(profile.PrivateKeyPath);
+        }
+
+        var profilePath = userProfilePath ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        var sshDirectory = Path.Combine(profilePath, ".ssh");
+        foreach (var name in new[] { "id_ed25519", "id_ecdsa", "id_rsa" })
+        {
+            var candidate = Path.Combine(sshDirectory, name);
+            if (File.Exists(candidate))
+            {
+                AddChoice(candidate);
+            }
+        }
+
+        return choices;
+
+        void AddChoice(string? path)
+        {
+            var value = path?.Trim();
+            if (!string.IsNullOrEmpty(value) &&
+                !choices.Contains(value, StringComparer.OrdinalIgnoreCase))
+            {
+                choices.Add(value);
+            }
+        }
     }
 
     private void Complete(bool connect)
