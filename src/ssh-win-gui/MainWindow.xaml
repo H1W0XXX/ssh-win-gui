@@ -31,32 +31,84 @@
               BorderThickness="0,0,0,1"
               Foreground="{StaticResource TextBrush}"
               Padding="2,0">
-            <MenuItem Header="{DynamicResource MenuTerminal}">
+            <Menu.Resources>
+                <Style x:Key="TopLevelMenuItemStyle" TargetType="MenuItem">
+                    <Setter Property="Foreground" Value="#1B1A19" />
+                    <Setter Property="Background" Value="Transparent" />
+                    <Setter Property="Padding" Value="12,3" />
+                    <Setter Property="Template">
+                        <Setter.Value>
+                            <ControlTemplate TargetType="MenuItem">
+                                <Grid SnapsToDevicePixels="True">
+                                    <Border x:Name="HeaderBorder"
+                                            Background="{TemplateBinding Background}"
+                                            CornerRadius="6"
+                                            Padding="{TemplateBinding Padding}">
+                                        <ContentPresenter ContentSource="Header"
+                                                          RecognizesAccessKey="True"
+                                                          TextElement.Foreground="#1B1A19"
+                                                          HorizontalAlignment="Center"
+                                                          VerticalAlignment="Center" />
+                                    </Border>
+                                    <Popup x:Name="PART_Popup"
+                                           AllowsTransparency="True"
+                                           Focusable="False"
+                                           Placement="Bottom"
+                                           PopupAnimation="Fade"
+                                           IsOpen="{Binding IsSubmenuOpen, RelativeSource={RelativeSource TemplatedParent}}">
+                                        <Border Margin="0,2,0,0"
+                                                Padding="2"
+                                                Background="{StaticResource SurfaceBrush}"
+                                                BorderBrush="{StaticResource ChromeBorderBrush}"
+                                                BorderThickness="1"
+                                                CornerRadius="8">
+                                            <StackPanel IsItemsHost="True"
+                                                        KeyboardNavigation.DirectionalNavigation="Cycle" />
+                                        </Border>
+                                    </Popup>
+                                </Grid>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsHighlighted" Value="True">
+                                        <Setter TargetName="HeaderBorder" Property="Background" Value="{StaticResource SurfaceMutedBrush}" />
+                                    </Trigger>
+                                    <Trigger Property="IsSubmenuOpen" Value="True">
+                                        <Setter TargetName="HeaderBorder" Property="Background" Value="{StaticResource SurfaceMutedBrush}" />
+                                    </Trigger>
+                                    <Trigger Property="IsEnabled" Value="False">
+                                        <Setter Property="Opacity" Value="0.45" />
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Setter.Value>
+                    </Setter>
+                </Style>
+            </Menu.Resources>
+            <MenuItem Header="{DynamicResource MenuTerminal}" Style="{StaticResource TopLevelMenuItemStyle}">
                 <MenuItem Header="{DynamicResource NewSshSession}" Click="NewSessionButton_OnClick" />
                 <MenuItem Header="{DynamicResource CloseCurrentSession}" Click="CloseSessionMenu_OnClick" />
                 <Separator />
                 <MenuItem Header="{DynamicResource Exit}" Click="ExitMenu_OnClick" />
             </MenuItem>
-            <MenuItem Header="{DynamicResource MenuSessions}">
+            <MenuItem Header="{DynamicResource MenuSessions}" Style="{StaticResource TopLevelMenuItemStyle}">
                 <MenuItem Header="{DynamicResource NewSshSession}" Click="NewSessionButton_OnClick" />
                 <MenuItem x:Name="EditSessionMenuItem" Header="{DynamicResource Edit}" IsEnabled="False" Click="EditSessionButton_OnClick" />
                 <MenuItem x:Name="DeleteSessionMenuItem" Header="{DynamicResource Delete}" IsEnabled="False" Click="DeleteSessionButton_OnClick" />
                 <Separator />
                 <MenuItem Header="{DynamicResource SavedSessions}" Click="SessionsRailButton_OnClick" />
             </MenuItem>
-            <MenuItem Header="{DynamicResource MenuView}">
+            <MenuItem Header="{DynamicResource MenuView}" Style="{StaticResource TopLevelMenuItemStyle}">
                 <MenuItem Header="{DynamicResource SessionsPanel}" Click="SessionsRailButton_OnClick" />
                 <MenuItem Header="{DynamicResource RemoteFiles}" Click="BrowserRailButton_OnClick" />
                 <MenuItem Header="{DynamicResource RsyncTransfers}" Click="TransfersRailButton_OnClick" />
             </MenuItem>
-            <MenuItem Header="{DynamicResource MenuTransfer}">
+            <MenuItem Header="{DynamicResource MenuTransfer}" Style="{StaticResource TopLevelMenuItemStyle}">
                 <MenuItem x:Name="UploadMenuItem" Header="{DynamicResource UploadWithRsync}" IsEnabled="False" Click="UploadButton_OnClick" />
                 <MenuItem x:Name="UploadFolderMenuItem" Header="{DynamicResource UploadFolderWithRsync}" IsEnabled="False" Click="UploadFolderButton_OnClick" />
                 <MenuItem x:Name="DownloadMenuItem" Header="{DynamicResource DownloadSelectedWithRsync}" IsEnabled="False" Click="DownloadButton_OnClick" />
                 <Separator />
                 <MenuItem Header="{DynamicResource ShowTransferLog}" Click="TransfersRailButton_OnClick" />
             </MenuItem>
-            <MenuItem Header="{DynamicResource MenuSettings}">
+            <MenuItem Header="{DynamicResource MenuSettings}" Style="{StaticResource TopLevelMenuItemStyle}">
                 <MenuItem Header="{DynamicResource KeywordHighlighting}">
                     <MenuItem x:Name="KeywordHighlightingEnabledMenuItem"
                               Header="{DynamicResource EnableKeywordHighlighting}"
@@ -77,7 +129,7 @@
                 <MenuItem Header="{DynamicResource ExportSettings}" Click="ExportSettingsMenuItem_OnClick" />
                 <MenuItem Header="{DynamicResource ImportSettings}" Click="ImportSettingsMenuItem_OnClick" />
             </MenuItem>
-            <MenuItem Header="{DynamicResource MenuHelp}">
+            <MenuItem Header="{DynamicResource MenuHelp}" Style="{StaticResource TopLevelMenuItemStyle}">
                 <MenuItem Header="{DynamicResource AboutRsyncShell}" Click="AboutMenu_OnClick" />
             </MenuItem>
         </Menu>
