@@ -108,12 +108,15 @@ To make saved sessions available to Codex globally, register that executable:
 codex mcp add ssh_win_gui -- D:\ssh-win-gui-win-x64\tools\mcp\ssh-win-gui-mcp.exe
 ```
 
-The MCP server exposes `list_sessions` and `run_script`. `run_script` sends the
+The MCP server exposes `list_sessions`, `run_script`, `upload_file`, and
+`download_file`. `run_script` sends the
 UTF-8 script directly to remote `sh -s` over SSH stdin, avoiding a local
 PowerShell/`ssh.exe` quoting layer. It reuses saved private-key, SOCKS5 and jump
 routes and strictly requires a fingerprint already approved by the GUI. It
 never returns private-key paths and intentionally does not support password or
-private-key-passphrase prompts. See [Codex SSH MCP integration](docs/codex-mcp.md)
+private-key-passphrase prompts. File transfers use the bundled Go rsync worker,
+with compression enabled and fingerprints logged according to the desktop
+transfer policy. See [Codex SSH MCP integration](docs/codex-mcp.md)
 for the complete tool schema, agent instructions, security boundary, and
 troubleshooting guide. Codex-compatible agents working in this repository also
 load the concise rules in [AGENTS.md](AGENTS.md).

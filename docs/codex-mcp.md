@@ -40,7 +40,7 @@ Arguments: none.
 
 Returns the saved session ID, name, group, endpoint, and route kind. It never
 returns private-key paths or credentials. Use the returned ID when saved names
-are duplicated; otherwise an exact saved name is accepted by `run_script`.
+are duplicated; otherwise an exact saved name is accepted by the other tools.
 
 ### `run_script`
 
@@ -70,6 +70,43 @@ df -h --output=source,size,used,avail,pcent,target | sed -n '1,12p'
 The script is an MCP JSON argument and then SSH stdin. It is not embedded in a
 PowerShell command line, so shell variables, quotes, command substitutions,
 multiline Python heredocs, and pipelines survive the local Windows boundary.
+
+### `upload_file`
+
+Uploads one local file through the bundled Go rsync worker. It reuses the
+selected session's private key and SOCKS5 or SSH jump chain. Compression is
+enabled, and SSH fingerprints are included in the bounded result log.
+
+| Name | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `session` | string | required | Session ID from `list_sessions`, or an exact saved name. |
+| `localPath` | string | required | Absolute path of an existing local file. |
+| `remoteDirectory` | string | required | Existing absolute remote destination directory. The local file name is retained. |
+| `overwrite` | boolean | `false` | Permit replacement of an existing remote file. |
+| `timeoutSeconds` | integer | `600` | Transfer timeout from 1 to 600 seconds. |
+
+### `download_file`
+
+Downloads one remote file through the bundled Go rsync worker. Authentication,
+routing, compression, and fingerprint logging are identical to `upload_file`.
+
+| Name | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `session` | string | required | Session ID from `list_sessions`, or an exact saved name. |
+| `remotePath` | string | required | Source file path on the remote host. |
+| `localDirectory` | string | required | Existing absolute local destination directory. The remote file name is retained. |
+| `overwrite` | boolean | `false` | Permit replacement of an existing local file. |
+| `timeoutSeconds` | integer | `600` | Transfer timeout from 1 to 600 seconds. |
+
+Both tools return paths, transferred byte count, overwrite/compression modes,
+a bounded worker log, and elapsed milliseconds as structured data. They
+intentionally transfer one file per call: file bytes are carried by the rsync
+protocol and are never embedded in MCP JSON or model context. Directory
+recursion remains a GUI operation.
+
+The rsync worker follows the desktop transfer policy: host fingerprints are
+logged but are not used to reject a transfer. `run_script` remains strict and
+rejects unknown or changed host keys.
 
 ## Agent usage rules
 

@@ -13,6 +13,7 @@ public sealed class SshTools
 {
     private const int DefaultOutputBytes = 16 * 1024;
     private const int MaximumOutputBytes = 64 * 1024;
+    private const int DefaultTransferTimeoutSeconds = 600;
 
     [McpServerTool(
          Name = "list_sessions",
@@ -115,6 +116,209 @@ public sealed class SshTools
             throw new InvalidOperationException(
                 $"SSH script failed on session '{profile.Name}': {SanitizeError(ex.Message, profiles)}");
         }
+    }
+
+    [McpServerTool(
+         Name = "upload_file",
+         Destructive = true,
+         OpenWorld = true,
+         UseStructuredContent = true,
+         OutputSchemaType = typeof(FileTransferResult)),
+     Description("Uploads one local file with ssh-win-gui's bundled rsync worker. The saved private key and SOCKS5/SSH-jump route are reused, compression is enabled, and fingerprints are logged. The destination directory must exist. Same-name files are not overwritten unless overwrite=true.")]
+    public static Task<FileTransferResult> UploadFileAsync(
+        [Description("Session ID from list_sessions, or an exact configured session name.")] string session,
+        [Description("Absolute path of the existing local file to upload.")] string localPath,
+        [Description("Absolute remote destination directory. The uploaded file keeps its local file name.")] string remoteDirectory,
+        [Description("Whether an existing remote file may be replaced. Defaults to false.")] bool overwrite = false,
+        [Description("Transfer timeout in seconds, from 1 to 600. Defaults to 600.")] int timeoutSeconds = DefaultTransferTimeoutSeconds,
+        CancellationToken cancellationToken = default) =>
+        TransferFileAsync(session, localPath, remoteDirectory, upload: true, overwrite, timeoutSeconds, cancellationToken);
+
+    [McpServerTool(
+         Name = "download_file",
+         Destructive = true,
+         OpenWorld = true,
+         UseStructuredContent = true,
+         OutputSchemaType = typeof(FileTransferResult)),
+     Description("Downloads one remote file with ssh-win-gui's bundled rsync worker. The saved private key and SOCKS5/SSH-jump route are reused, compression is enabled, and fingerprints are logged. The destination directory must exist. Same-name files are not overwritten unless overwrite=true.")]
+    public static Task<FileTransferResult> DownloadFileAsync(
+        [Description("Session ID from list_sessions, or an exact configured session name.")] string session,
+        [Description("Remote source file path.")] string remotePath,
+        [Description("Absolute local destination directory. The downloaded file keeps its remote file name.")] string localDirectory,
+        [Description("Whether an existing local file may be replaced. Defaults to false.")] bool overwrite = false,
+        [Description("Transfer timeout in seconds, from 1 to 600. Defaults to 600.")] int timeoutSeconds = DefaultTransferTimeoutSeconds,
+        CancellationToken cancellationToken = default) =>
+        TransferFileAsync(session, localDirectory, remotePath, upload: false, overwrite, timeoutSeconds, cancellationToken);
+
+    private static async Task<FileTransferResult> TransferFileAsync(
+        string session,
+        string localPath,
+        string remotePath,
+        bool upload,
+        bool overwrite,
+        int timeoutSeconds,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(session);
+        ArgumentException.ThrowIfNullOrWhiteSpace(localPath);
+        ArgumentException.ThrowIfNullOrWhiteSpace(remotePath);
+        if (timeoutSeconds is < 1 or > DefaultTransferTimeoutSeconds)
+            throw new ArgumentOutOfRangeException(nameof(timeoutSeconds), "Timeout must be between 1 and 600 seconds.");
+        if (remotePath.Contains('\0'))
+            throw new ArgumentException("Remote path cannot contain a NUL character.", nameof(remotePath));
+
+        var fullLocalPath = NormalizeAbsoluteLocalPath(localPath, nameof(localPath));
+        string localTransferPath;
+        string remoteTransferPath;
+        string destinationPath;
+        if (upload)
+        {
+            if (!File.Exists(fullLocalPath))
+                throw new FileNotFoundException("The local source file does not exist.", fullLocalPath);
+            if (!remotePath.StartsWith("/", StringComparison.Ordinal))
+                throw new ArgumentException("Remote destination directory must be an absolute POSIX path.", nameof(remotePath));
+            localTransferPath = fullLocalPath;
+            remoteTransferPath = EnsureRemoteDirectory(remotePath);
+            destinationPath = remoteTransferPath + Path.GetFileName(fullLocalPath);
+        }
+        else
+        {
+            if (!Directory.Exists(fullLocalPath))
+                throw new DirectoryNotFoundException("The local destination directory does not exist.");
+            var remoteFileName = GetRemoteFileName(remotePath);
+            localTransferPath = Path.TrimEndingDirectorySeparator(fullLocalPath) + Path.DirectorySeparatorChar;
+            remoteTransferPath = remotePath;
+            destinationPath = Path.Combine(fullLocalPath, remoteFileName);
+            if (!overwrite && (File.Exists(destinationPath) || Directory.Exists(destinationPath)))
+                throw new IOException("The local destination already contains an item with the same name. Set overwrite=true to replace it.");
+        }
+
+        var profiles = await new SessionRepository().LoadAsync(cancellationToken).ConfigureAwait(false);
+        var profile = ResolveProfile(profiles, session);
+        if (string.IsNullOrWhiteSpace(profile.PrivateKeyPath))
+            throw new InvalidOperationException(
+                $"Session '{profile.Name}' has no saved private key. Password authentication is intentionally unavailable to the MCP server.");
+
+        var privateKeyPath = Environment.ExpandEnvironmentVariables(profile.PrivateKeyPath);
+        if (!File.Exists(privateKeyPath))
+            throw new FileNotFoundException($"The saved private key for session '{profile.Name}' does not exist.");
+
+        var authentication = new SshAuthenticationOptions
+        {
+            Kind = SshAuthenticationKind.PrivateKey,
+            PrivateKeyPath = privateKeyPath,
+        };
+        var route = SshRouteResolver.Resolve(profile, profiles);
+        var workerPath = ResolveRsyncWorkerPath();
+        if (workerPath is null)
+            throw new FileNotFoundException("The bundled rsync worker was not found next to the MCP server.");
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(timeoutSeconds));
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeout.Token);
+        var stopwatch = Stopwatch.StartNew();
+        long transferredBytes = 0;
+        var log = new BoundedOutput(16 * 1024);
+
+        try
+        {
+            if (upload && !overwrite)
+            {
+                bool LogHostKey(SshHostKeyInfo key)
+                {
+                    log.Append(Encoding.UTF8.GetBytes(
+                        $"[host-key] {key.Host}:{key.Port} {key.Algorithm} {key.FingerprintSha256}{Environment.NewLine}"));
+                    return true;
+                }
+                var listing = await new RemoteFileService().ListAsync(
+                    profile, authentication, LogHostKey, remotePath, route, linked.Token).ConfigureAwait(false);
+                if (listing.IsTruncated)
+                    throw new IOException("The remote directory listing is truncated, so overwrite safety cannot be verified. Choose a narrower directory or set overwrite=true.");
+                var fileName = Path.GetFileName(fullLocalPath);
+                if (listing.Entries.Any(entry => string.Equals(entry.Name, fileName, StringComparison.Ordinal)))
+                    throw new IOException("The remote destination already contains an item with the same name. Set overwrite=true to replace it.");
+            }
+
+            var service = new RsyncWorkerTransferService(workerPath);
+            service.EventReceived += (_, transferEvent) =>
+            {
+                if (transferEvent.TransferredBytes is long current)
+                    transferredBytes = Math.Max(transferredBytes, current);
+                if (!string.IsNullOrWhiteSpace(transferEvent.Message))
+                    log.Append(Encoding.UTF8.GetBytes(transferEvent.Message + Environment.NewLine));
+            };
+            await service.TransferAsync(new RsyncTransferRequest
+            {
+                Direction = upload ? RsyncTransferDirection.Upload : RsyncTransferDirection.Download,
+                Profile = profile,
+                Route = route,
+                LocalPath = localTransferPath,
+                RemotePath = remoteTransferPath,
+                PreservePermissions = false,
+                PreserveLinks = false,
+                Compress = true,
+            }, authentication, linked.Token).ConfigureAwait(false);
+
+            stopwatch.Stop();
+            var bytes = upload
+                ? new FileInfo(fullLocalPath).Length
+                : File.Exists(destinationPath) ? new FileInfo(destinationPath).Length : transferredBytes;
+            return new FileTransferResult(
+                profile.Id,
+                profile.Name,
+                upload ? "upload" : "download",
+                upload ? fullLocalPath : destinationPath,
+                upload ? destinationPath : remotePath,
+                bytes,
+                overwrite,
+                true,
+                log.GetText().TrimEnd(),
+                log.Truncated,
+                stopwatch.ElapsedMilliseconds);
+        }
+        catch (OperationCanceledException) when (timeout.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+        {
+            throw new TimeoutException($"rsync transfer timed out after {timeoutSeconds} seconds on session '{profile.Name}'.");
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException(
+                $"rsync {(upload ? "upload" : "download")} failed on session '{profile.Name}': {SanitizeError(ex.Message, profiles)}");
+        }
+    }
+
+    internal static string? ResolveRsyncWorkerPath(string? baseDirectory = null)
+    {
+        var root = Path.GetFullPath(baseDirectory ?? AppContext.BaseDirectory);
+        var candidates = new[]
+        {
+            Path.Combine(root, "tools", "rsync", "rsyncworker.exe"),
+            Path.GetFullPath(Path.Combine(root, "..", "rsync", "rsyncworker.exe")),
+        };
+        return candidates.FirstOrDefault(File.Exists);
+    }
+
+    private static string NormalizeAbsoluteLocalPath(string path, string parameterName)
+    {
+        var expanded = Environment.ExpandEnvironmentVariables(path);
+        if (!Path.IsPathFullyQualified(expanded))
+            throw new ArgumentException("Local path must be absolute.", parameterName);
+        return Path.GetFullPath(expanded);
+    }
+
+    private static string EnsureRemoteDirectory(string path) =>
+        path.EndsWith("/", StringComparison.Ordinal) ? path : path + "/";
+
+    private static string GetRemoteFileName(string path)
+    {
+        if (!path.StartsWith("/", StringComparison.Ordinal) || path.EndsWith("/", StringComparison.Ordinal))
+            throw new ArgumentException("Remote source must be an absolute file path.", nameof(path));
+        var name = path[(path.LastIndexOf('/') + 1)..];
+        if (name.Length == 0 || name is "." or "..")
+            throw new ArgumentException("Remote source must identify a file.", nameof(path));
+        return name;
     }
 
     internal static ConnectionProfile ResolveProfile(
@@ -303,4 +507,17 @@ public sealed record RemoteScriptResult(
     string StandardError,
     bool StandardOutputTruncated,
     bool StandardErrorTruncated,
+    long DurationMilliseconds);
+
+public sealed record FileTransferResult(
+    string SessionId,
+    string SessionName,
+    string Direction,
+    string LocalPath,
+    string RemotePath,
+    long BytesTransferred,
+    bool Overwrite,
+    bool Compress,
+    string Log,
+    bool LogTruncated,
     long DurationMilliseconds);
