@@ -82,8 +82,17 @@ func normalizeLocalRequest(localDir, requested string) (string, string) {
 		}
 	}
 	if filepath.VolumeName(requested) != "" && filepath.IsAbs(requested) {
-		local = filepath.Dir(requested)
-		requested = filepath.Base(requested)
+		if strings.HasSuffix(requested, "/") || strings.HasSuffix(requested, string(os.PathSeparator)) {
+			// Match the POSIX absolute-path behavior above: a trailing slash
+			// means walk the directory as the transfer root and send its
+			// contents. filepath.Dir/Base would otherwise discard that
+			// distinction on Windows.
+			local = filepath.Clean(requested)
+			requested = "."
+		} else {
+			local = filepath.Dir(requested)
+			requested = filepath.Base(requested)
+		}
 	}
 	return local, requested
 }

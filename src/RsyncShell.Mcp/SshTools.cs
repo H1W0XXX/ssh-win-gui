@@ -272,8 +272,7 @@ public sealed class SshTools
             var service = new RsyncWorkerTransferService(workerPath);
             service.EventReceived += (_, transferEvent) =>
             {
-                if (transferEvent.TransferredBytes is long current)
-                    transferredBytes = Math.Max(transferredBytes, current);
+                transferredBytes = Math.Max(transferredBytes, GetTransferProgressBytes(transferEvent));
                 if (!string.IsNullOrWhiteSpace(transferEvent.Message))
                     log.Append(Encoding.UTF8.GetBytes(transferEvent.Message + Environment.NewLine));
             };
@@ -369,6 +368,11 @@ public sealed class SshTools
         };
         return candidates.FirstOrDefault(File.Exists);
     }
+
+    internal static long GetTransferProgressBytes(RsyncWorkerEvent transferEvent) =>
+        Math.Max(
+            transferEvent.TransferredBytes ?? 0,
+            Math.Max(transferEvent.ProtocolReadBytes, transferEvent.ProtocolWrittenBytes));
 
     private static string NormalizeAbsoluteLocalPath(string path, string parameterName)
     {

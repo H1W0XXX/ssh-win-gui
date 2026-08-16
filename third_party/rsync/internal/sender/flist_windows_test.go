@@ -14,3 +14,15 @@ func TestNormalizeLocalRequestWindowsAbsolutePath(t *testing.T) {
 		t.Fatalf("unexpected requested: got %q", gotRequested)
 	}
 }
+
+func TestNormalizeLocalRequestWindowsDirectoryContents(t *testing.T) {
+	requested := `Z:\rsync-test\folder/`
+	gotLocal, gotRequested := normalizeLocalRequest(`\\?\`, requested)
+
+	if gotLocal != `Z:\rsync-test\folder` {
+		t.Fatalf("unexpected local: got %q", gotLocal)
+	}
+	if gotRequested != "." {
+		t.Fatalf("unexpected requested: got %q", gotRequested)
+	}
+}

@@ -255,6 +255,17 @@ func doCmd(osenv *rsyncos.Env, opts *rsyncopts.Options, machine, user, path stri
 
 // rsync/main.c:client_run
 func ClientRun(osenv *rsyncos.Env, opts *rsyncopts.Options, conn io.ReadWriter, paths []string, negotiate bool) (*rsyncstats.TransferStats, error) {
+	return clientRun(osenv, opts, conn, paths, negotiate, false)
+}
+
+// ClientRunExactDestination runs receiver mode with paths[0] interpreted as
+// the exact destination file. It is used by API clients that already know the
+// remote source is a single file and need rename-at-destination semantics.
+func ClientRunExactDestination(osenv *rsyncos.Env, opts *rsyncopts.Options, conn io.ReadWriter, paths []string, negotiate bool) (*rsyncstats.TransferStats, error) {
+	return clientRun(osenv, opts, conn, paths, negotiate, true)
+}
+
+func clientRun(osenv *rsyncos.Env, opts *rsyncopts.Options, conn io.ReadWriter, paths []string, negotiate bool, exactDestination bool) (*rsyncstats.TransferStats, error) {
 	crd := &rsyncwire.CountingReader{R: conn}
 	cwr := &rsyncwire.CountingWriter{W: conn}
 	c := &rsyncwire.Conn{
@@ -369,24 +380,6 @@ func ClientRun(osenv *rsyncos.Env, opts *rsyncopts.Options, conn io.ReadWriter, 
 	if opts.Verbose() {
 		osenv.Logf("receiving to dest=%s", rt.Dest)
 	}
-	if rt.Dest == "" {
-		// just listing modules, not transferring anything
-	} else {
-		if err := os.MkdirAll(rt.Dest, 0755); err != nil {
-			return nil, fmt.Errorf("MkdirAll(dest=%s): %v", rt.Dest, err)
-		}
-		rt.DestRoot, err = os.OpenRoot(rt.Dest)
-		if err != nil {
-			return nil, fmt.Errorf("OpenRoot(dest=%s): %v", rt.Dest, err)
-		}
-		defer rt.DestRoot.Close()
-		if osenv.Restrict() {
-			if err := restrict.MaybeFileSystem(nil, []string{rt.Dest}); err != nil {
-				return nil, fmt.Errorf("landlock: %v", err)
-			}
-		}
-	}
-
 	for _, rule := range opts.FilterRules() {
 		c.WriteInt32(int32(len(rule)))
 		c.WriteString(rule)
@@ -412,7 +405,45 @@ func ClientRun(osenv *rsyncos.Env, opts *rsyncopts.Options, conn io.ReadWriter, 
 		osenv.Logf("received %d names", len(fileList))
 	}
 
+	if exactDestination {
+		if err := setExactDestination(rt, fileList); err != nil {
+			return nil, err
+		}
+	}
+	if rt.Dest != "" {
+		if err := os.MkdirAll(rt.Dest, 0755); err != nil {
+			return nil, fmt.Errorf("MkdirAll(dest=%s): %v", rt.Dest, err)
+		}
+		rt.DestRoot, err = os.OpenRoot(rt.Dest)
+		if err != nil {
+			return nil, fmt.Errorf("OpenRoot(dest=%s): %v", rt.Dest, err)
+		}
+		defer rt.DestRoot.Close()
+		if osenv.Restrict() {
+			if err := restrict.MaybeFileSystem(nil, []string{rt.Dest}); err != nil {
+				return nil, fmt.Errorf("landlock: %v", err)
+			}
+		}
+	}
+
 	return rt.Do(c, fileList, false)
+}
+
+func setExactDestination(rt *receiver.Transfer, fileList []*receiver.File) error {
+	if rt.Dest == "" {
+		return fmt.Errorf("exact destination path is empty")
+	}
+	if len(fileList) != 1 || fileList[0].FileMode().IsDir() {
+		return fmt.Errorf("exact destination requires one non-directory source, got %d entries", len(fileList))
+	}
+	destination := filepath.Clean(rt.Dest)
+	name := filepath.Base(destination)
+	if name == "." || name == string(filepath.Separator) {
+		return fmt.Errorf("exact destination must include a file name")
+	}
+	rt.Dest = filepath.Dir(destination)
+	fileList[0].Name = name
+	return nil
 }
 
 func clientMain(ctx context.Context, osenv *rsyncos.Env, opts *rsyncopts.Options, remaining []string) (*rsyncstats.TransferStats, error) {

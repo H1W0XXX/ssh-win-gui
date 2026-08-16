@@ -12,4 +12,9 @@ a received file and uses `golang.org/x/sys/windows.Rename` so an existing target
 can be atomically replaced. `receiverrenameio_windows_test.go` covers that
 behavior.
 
+RsyncShell also preserves trailing-slash content-copy semantics for absolute
+Windows sender paths and provides an exact single-file receiver destination
+mode. The latter writes directly to the requested filename rather than treating
+it as a directory.
+
 The upstream copyright and BSD-3-Clause license are retained in `LICENSE`.

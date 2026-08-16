@@ -2,8 +2,37 @@ package maincmd
 
 import (
 	"fmt"
+	"path/filepath"
 	"testing"
+
+	"github.com/gokrazy/rsync"
+	"github.com/gokrazy/rsync/internal/receiver"
 )
+
+func TestSetExactDestinationRewritesSingleFile(t *testing.T) {
+	destination := filepath.Join("root", "renamed.txt")
+	rt := &receiver.Transfer{Dest: destination}
+	files := []*receiver.File{{Name: "original.txt", Mode: rsync.S_IFREG}}
+
+	if err := setExactDestination(rt, files); err != nil {
+		t.Fatal(err)
+	}
+	if rt.Dest != filepath.Dir(destination) {
+		t.Fatalf("destination root = %q, want %q", rt.Dest, filepath.Dir(destination))
+	}
+	if files[0].Name != filepath.Base(destination) {
+		t.Fatalf("file name = %q, want %q", files[0].Name, filepath.Base(destination))
+	}
+}
+
+func TestSetExactDestinationRejectsDirectory(t *testing.T) {
+	rt := &receiver.Transfer{Dest: filepath.Join("root", "renamed")}
+	files := []*receiver.File{{Name: "original", Mode: rsync.S_IFDIR}}
+
+	if err := setExactDestination(rt, files); err == nil {
+		t.Fatal("directory source unexpectedly accepted as an exact file destination")
+	}
+}
 
 func TestParseHostspec(t *testing.T) {
 	for _, tt := range []struct {

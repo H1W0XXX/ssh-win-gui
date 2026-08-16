@@ -1,4 +1,5 @@
 using RsyncShell.Core.Models;
+using RsyncShell.Core.Services;
 using RsyncShell.Mcp;
 
 namespace RsyncShell.Core.Tests;
@@ -129,6 +130,31 @@ public sealed class SshMcpProfileResolutionTests
         {
             Directory.Delete(root, recursive: true);
         }
+    }
+
+    [Theory]
+    [InlineData(4096L, 2048L, null, 4096L)]
+    [InlineData(0L, 0L, 8192L, 8192L)]
+    [InlineData(16384L, 32768L, 24576L, 32768L)]
+    public void TransferProgressUsesLargestAvailableByteCounter(
+        long protocolRead,
+        long protocolWritten,
+        long? transferred,
+        long expected)
+    {
+        var transferEvent = new RsyncWorkerEvent(
+            "progress",
+            null,
+            null,
+            null,
+            "transfer",
+            protocolRead,
+            protocolWritten,
+            transferred,
+            null,
+            null);
+
+        Assert.Equal(expected, SshTools.GetTransferProgressBytes(transferEvent));
     }
 
     private static ConnectionProfile Profile(string id, string name) => new()

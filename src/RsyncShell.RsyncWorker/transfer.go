@@ -126,6 +126,8 @@ func runRsyncOverSSH(ctx context.Context, sshClient *ssh.Client, req TransferReq
 	clientOptions := []rsyncclient.Option{rsyncclient.WithStderr(&rsyncLogWriter{reporter: reporter, level: "info"})}
 	if req.Direction == "upload" {
 		clientOptions = append(clientOptions, rsyncclient.WithSender())
+	} else if !req.CopyContents {
+		clientOptions = append(clientOptions, rsyncclient.WithExactDestination())
 	}
 	client, err := rsyncclient.New(args, clientOptions...)
 	if err != nil {

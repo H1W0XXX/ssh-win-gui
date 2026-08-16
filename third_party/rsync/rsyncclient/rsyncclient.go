@@ -42,6 +42,15 @@ func WithSender() Option {
 	})
 }
 
+// WithExactDestination makes receiver mode treat the single path passed to
+// [Client.Run] as the exact destination file instead of a destination
+// directory. The remote side must send exactly one non-directory entry.
+func WithExactDestination() Option {
+	return clientOptionFunc(func(c *Client) {
+		c.exactDestination = true
+	})
+}
+
 // WithoutNegotiate disables protocol version negotiation (enabled by default).
 func WithoutNegotiate() Option {
 	return clientOptionFunc(func(c *Client) {
@@ -56,10 +65,11 @@ func DontRestrict() Option {
 }
 
 type Client struct {
-	osenv     *rsyncos.Env
-	opts      *rsyncopts.Options
-	negotiate bool
-	sender    bool
+	osenv            *rsyncos.Env
+	opts             *rsyncopts.Options
+	negotiate        bool
+	sender           bool
+	exactDestination bool
 }
 
 // New creates a new [Client]. You can call [Client.Run] one or more times with
@@ -121,7 +131,13 @@ type Result struct {
 // [Client.ServerCommandOptions] to the server and then arrange for two
 // [io.ReadWriter] connections between client and server.
 func (c *Client) Run(ctx context.Context, conn io.ReadWriter, paths []string) (*Result, error) {
-	stats, err := maincmd.ClientRun(c.osenv, c.opts, conn, paths, c.negotiate)
+	var stats *rsyncstats.TransferStats
+	var err error
+	if c.exactDestination {
+		stats, err = maincmd.ClientRunExactDestination(c.osenv, c.opts, conn, paths, c.negotiate)
+	} else {
+		stats, err = maincmd.ClientRun(c.osenv, c.opts, conn, paths, c.negotiate)
+	}
 	if err != nil {
 		return nil, err
 	}
