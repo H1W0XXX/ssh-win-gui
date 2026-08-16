@@ -42,49 +42,73 @@ public sealed class SshMcpProfileResolutionTests
     }
 
     [Fact]
-    public async Task UploadFileRejectsRelativeLocalPathBeforeLoadingSessions()
+    public async Task RsyncUploadRejectsRelativeLocalSourceBeforeLoadingSessions()
     {
         var error = await Assert.ThrowsAsync<ArgumentException>(() =>
-            SshTools.UploadFileAsync("unused", "relative.txt", "/tmp/relative.txt"));
+            SshTools.RsyncUploadAsync("unused", "relative.txt", "/tmp/renamed.txt"));
 
-        Assert.Equal("localPath", error.ParamName);
+        Assert.Equal("localSourcePath", error.ParamName);
     }
 
     [Fact]
-    public async Task DownloadFileRejectsExistingDestinationByDefaultBeforeLoadingSessions()
+    public async Task RsyncDownloadRejectsRelativeLocalDestinationBeforeLoadingSessions()
     {
-        var directory = Path.Combine(Path.GetTempPath(), "ssh-win-gui-mcp-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(directory);
-        var path = Path.Combine(directory, "example.txt");
-        File.WriteAllText(path, "existing");
-        try
-        {
-            var error = await Assert.ThrowsAsync<IOException>(() =>
-                SshTools.DownloadFileAsync("unused", "/tmp/example.txt", directory));
+        var error = await Assert.ThrowsAsync<ArgumentException>(() =>
+            SshTools.RsyncDownloadAsync("unused", "/tmp/example.txt", "relative.txt"));
 
-            Assert.Contains("overwrite=true", error.Message, StringComparison.Ordinal);
-        }
-        finally
-        {
-            Directory.Delete(directory, recursive: true);
-        }
+        Assert.Equal("localDestinationPath", error.ParamName);
     }
 
     [Fact]
-    public async Task FileTransferRejectsRemotePathContainingNull()
+    public async Task RsyncTransferRejectsRemotePathContainingNull()
     {
         var path = Path.GetTempFileName();
         try
         {
             var error = await Assert.ThrowsAsync<ArgumentException>(() =>
-                SshTools.DownloadFileAsync("unused", "/tmp/bad\0name", path));
+                SshTools.RsyncDownloadAsync("unused", "/tmp/bad\0name", path));
 
-            Assert.Equal("remotePath", error.ParamName);
+            Assert.Equal("remoteSourcePath", error.ParamName);
         }
         finally
         {
             File.Delete(path);
         }
+    }
+
+    [Fact]
+    public async Task RsyncUploadRejectsFilesystemRootAsDestination()
+    {
+        var path = Path.GetTempFileName();
+        try
+        {
+            var error = await Assert.ThrowsAsync<ArgumentException>(() =>
+                SshTools.RsyncUploadAsync("unused", path, "/"));
+
+            Assert.Equal("remoteDestinationPath", error.ParamName);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public async Task RsyncDownloadRejectsTrailingLocalDestinationSeparator()
+    {
+        var destination = Path.Combine(Path.GetTempPath(), "renamed") + Path.DirectorySeparatorChar;
+        var error = await Assert.ThrowsAsync<ArgumentException>(() =>
+            SshTools.RsyncDownloadAsync("unused", "/tmp/example", destination));
+
+        Assert.Equal("localDestinationPath", error.ParamName);
+    }
+
+    [Theory]
+    [InlineData("/name", "/", "name")]
+    [InlineData("/data/models/Qwen-New", "/data/models", "Qwen-New")]
+    public void SplitRemotePathReturnsExactParentAndName(string path, string parent, string name)
+    {
+        Assert.Equal((parent, name), SshTools.SplitRemotePath(path));
     }
 
     [Fact]

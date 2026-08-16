@@ -71,38 +71,46 @@ The script is an MCP JSON argument and then SSH stdin. It is not embedded in a
 PowerShell command line, so shell variables, quotes, command substitutions,
 multiline Python heredocs, and pipelines survive the local Windows boundary.
 
-### `upload_file`
+### `rsync_upload`
 
-Uploads one local file through the bundled Go rsync worker. It reuses the
-selected session's private key and SOCKS5 or SSH jump chain. Compression is
-enabled, and SSH fingerprints are included in the bounded result log.
-
-| Name | Type | Default | Meaning |
-| --- | --- | --- | --- |
-| `session` | string | required | Session ID from `list_sessions`, or an exact saved name. |
-| `localPath` | string | required | Absolute path of an existing local file. |
-| `remoteDirectory` | string | required | Existing absolute remote destination directory. The local file name is retained. |
-| `overwrite` | boolean | `false` | Permit replacement of an existing remote file. |
-| `timeoutSeconds` | integer | `600` | Transfer timeout from 1 to 600 seconds. |
-
-### `download_file`
-
-Downloads one remote file through the bundled Go rsync worker. Authentication,
-routing, compression, and fingerprint logging are identical to `upload_file`.
+Uploads a local file or directory through the bundled Go rsync worker. It
+reuses the selected session's private key and SOCKS5 or SSH jump chain.
+Compression is enabled, and SSH fingerprints are included in the bounded
+result log.
 
 | Name | Type | Default | Meaning |
 | --- | --- | --- | --- |
 | `session` | string | required | Session ID from `list_sessions`, or an exact saved name. |
-| `remotePath` | string | required | Source file path on the remote host. |
-| `localDirectory` | string | required | Existing absolute local destination directory. The remote file name is retained. |
-| `overwrite` | boolean | `false` | Permit replacement of an existing local file. |
+| `localSourcePath` | string | required | Absolute path of an existing local file or directory. |
+| `remoteDestinationPath` | string | required | Exact absolute remote destination path, including the desired final name. |
+| `overwrite` | boolean | `false` | Permit replacement of an existing file or merging into an existing directory of the same type. |
 | `timeoutSeconds` | integer | `600` | Transfer timeout from 1 to 600 seconds. |
 
-Both tools return paths, transferred byte count, overwrite/compression modes,
-a bounded worker log, and elapsed milliseconds as structured data. They
-intentionally transfer one file per call: file bytes are carried by the rsync
-protocol and are never embedded in MCP JSON or model context. Directory
-recursion remains a GUI operation.
+### `rsync_download`
+
+Downloads a remote file or directory through the bundled Go rsync worker.
+Authentication, routing, compression, and fingerprint logging are identical
+to `rsync_upload`.
+
+| Name | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `session` | string | required | Session ID from `list_sessions`, or an exact saved name. |
+| `remoteSourcePath` | string | required | Absolute path of an existing remote file or directory. |
+| `localDestinationPath` | string | required | Exact absolute local destination path, including the desired final name. Its parent must exist. |
+| `overwrite` | boolean | `false` | Permit replacement of an existing file or merging into an existing directory of the same type. |
+| `timeoutSeconds` | integer | `600` | Transfer timeout from 1 to 600 seconds. |
+
+Both tools accept exact destination paths, so an agent can select any writable
+location and rename the source during transfer. Files are replaced only when
+`overwrite=true`. Directories are recursive; when the exact destination
+directory already exists, `overwrite=true` merges into it and replaces
+same-name files without deleting unrelated destination files. A file is never
+replaced by a directory, or vice versa.
+
+Results include source type, exact local/remote paths, optional single-file
+size, rsync protocol progress bytes, overwrite/compression modes, a bounded
+worker log, and elapsed milliseconds. File contents are carried by rsync and
+never embedded in MCP JSON or model context.
 
 The rsync worker follows the desktop transfer policy: host fingerprints are
 logged but are not used to reject a transfer. `run_script` remains strict and
@@ -157,6 +165,9 @@ JSON documents, model manifests, or binary data.
 - **Timed out:** narrow the operation or increase `timeoutSeconds` up to 600.
 - **Output truncated:** filter or page the remote output; raise
   `maxOutputBytes` only when the additional content is necessary.
+- **rsync worker missing:** publish/copy the complete application directory so
+  `tools\mcp\ssh-win-gui-mcp.exe` and `tools\rsync\rsyncworker.exe` remain in
+  their packaged sibling directories.
 
 ## Build and package
 

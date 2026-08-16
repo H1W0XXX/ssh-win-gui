@@ -22,7 +22,7 @@ public sealed class SshTools
          OpenWorld = false,
          UseStructuredContent = true,
          OutputSchemaType = typeof(SessionSummary[])),
-     Description("Lists SSH sessions configured in ssh-win-gui. Use these session IDs or exact names with run_script. Private-key paths and credentials are never returned.")]
+     Description("Lists SSH sessions configured in ssh-win-gui. Use these session IDs or exact names with run_script, rsync_upload, or rsync_download. Private-key paths and credentials are never returned.")]
     public static async Task<IReadOnlyList<SessionSummary>> ListSessionsAsync(
         CancellationToken cancellationToken = default)
     {
@@ -119,38 +119,38 @@ public sealed class SshTools
     }
 
     [McpServerTool(
-         Name = "upload_file",
+         Name = "rsync_upload",
          Destructive = true,
          OpenWorld = true,
          UseStructuredContent = true,
-         OutputSchemaType = typeof(FileTransferResult)),
-     Description("Uploads one local file with ssh-win-gui's bundled rsync worker. The saved private key and SOCKS5/SSH-jump route are reused, compression is enabled, and fingerprints are logged. The destination directory must exist. Same-name files are not overwritten unless overwrite=true.")]
-    public static Task<FileTransferResult> UploadFileAsync(
+         OutputSchemaType = typeof(RsyncPathTransferResult)),
+     Description("Uploads a local file or directory to an exact remote destination path with ssh-win-gui's bundled rsync worker. The destination may use a different name. Directories are copied recursively. Compression is enabled and fingerprints are logged. Existing files are not replaced and existing directories are not merged unless overwrite=true.")]
+    public static Task<RsyncPathTransferResult> RsyncUploadAsync(
         [Description("Session ID from list_sessions, or an exact configured session name.")] string session,
-        [Description("Absolute path of the existing local file to upload.")] string localPath,
-        [Description("Absolute remote destination directory. The uploaded file keeps its local file name.")] string remoteDirectory,
-        [Description("Whether an existing remote file may be replaced. Defaults to false.")] bool overwrite = false,
+        [Description("Absolute path of the existing local source file or directory.")] string localSourcePath,
+        [Description("Exact absolute remote destination path. This includes the desired file or directory name, so it may rename the source.")] string remoteDestinationPath,
+        [Description("Whether an existing remote file may be replaced or an existing remote directory may be merged. Defaults to false.")] bool overwrite = false,
         [Description("Transfer timeout in seconds, from 1 to 600. Defaults to 600.")] int timeoutSeconds = DefaultTransferTimeoutSeconds,
         CancellationToken cancellationToken = default) =>
-        TransferFileAsync(session, localPath, remoteDirectory, upload: true, overwrite, timeoutSeconds, cancellationToken);
+        TransferPathAsync(session, localSourcePath, remoteDestinationPath, upload: true, overwrite, timeoutSeconds, cancellationToken);
 
     [McpServerTool(
-         Name = "download_file",
+         Name = "rsync_download",
          Destructive = true,
          OpenWorld = true,
          UseStructuredContent = true,
-         OutputSchemaType = typeof(FileTransferResult)),
-     Description("Downloads one remote file with ssh-win-gui's bundled rsync worker. The saved private key and SOCKS5/SSH-jump route are reused, compression is enabled, and fingerprints are logged. The destination directory must exist. Same-name files are not overwritten unless overwrite=true.")]
-    public static Task<FileTransferResult> DownloadFileAsync(
+         OutputSchemaType = typeof(RsyncPathTransferResult)),
+     Description("Downloads a remote file or directory to an exact local destination path with ssh-win-gui's bundled rsync worker. The destination may use a different name. Directories are copied recursively. Compression is enabled and fingerprints are logged. Existing files are not replaced and existing directories are not merged unless overwrite=true.")]
+    public static Task<RsyncPathTransferResult> RsyncDownloadAsync(
         [Description("Session ID from list_sessions, or an exact configured session name.")] string session,
-        [Description("Remote source file path.")] string remotePath,
-        [Description("Absolute local destination directory. The downloaded file keeps its remote file name.")] string localDirectory,
-        [Description("Whether an existing local file may be replaced. Defaults to false.")] bool overwrite = false,
+        [Description("Absolute path of the existing remote source file or directory.")] string remoteSourcePath,
+        [Description("Exact absolute local destination path. This includes the desired file or directory name, so it may rename the source.")] string localDestinationPath,
+        [Description("Whether an existing local file may be replaced or an existing local directory may be merged. Defaults to false.")] bool overwrite = false,
         [Description("Transfer timeout in seconds, from 1 to 600. Defaults to 600.")] int timeoutSeconds = DefaultTransferTimeoutSeconds,
         CancellationToken cancellationToken = default) =>
-        TransferFileAsync(session, localDirectory, remotePath, upload: false, overwrite, timeoutSeconds, cancellationToken);
+        TransferPathAsync(session, localDestinationPath, remoteSourcePath, upload: false, overwrite, timeoutSeconds, cancellationToken);
 
-    private static async Task<FileTransferResult> TransferFileAsync(
+    private static async Task<RsyncPathTransferResult> TransferPathAsync(
         string session,
         string localPath,
         string remotePath,
@@ -160,37 +160,37 @@ public sealed class SshTools
         CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(session);
-        ArgumentException.ThrowIfNullOrWhiteSpace(localPath);
-        ArgumentException.ThrowIfNullOrWhiteSpace(remotePath);
+        var localParameterName = upload ? "localSourcePath" : "localDestinationPath";
+        var remoteParameterName = upload ? "remoteDestinationPath" : "remoteSourcePath";
+        if (string.IsNullOrWhiteSpace(localPath))
+            throw new ArgumentException("Local path is required.", localParameterName);
+        if (string.IsNullOrWhiteSpace(remotePath))
+            throw new ArgumentException("Remote path is required.", remoteParameterName);
         if (timeoutSeconds is < 1 or > DefaultTransferTimeoutSeconds)
             throw new ArgumentOutOfRangeException(nameof(timeoutSeconds), "Timeout must be between 1 and 600 seconds.");
-        if (remotePath.Contains('\0'))
-            throw new ArgumentException("Remote path cannot contain a NUL character.", nameof(remotePath));
+        ValidateAbsoluteRemotePath(remotePath, remoteParameterName);
 
-        var fullLocalPath = NormalizeAbsoluteLocalPath(localPath, nameof(localPath));
-        string localTransferPath;
-        string remoteTransferPath;
-        string destinationPath;
+        if (!upload)
+            ValidateExactLocalDestinationPath(localPath, localParameterName);
+        var fullLocalPath = NormalizeAbsoluteLocalPath(localPath, localParameterName);
+        bool? sourceIsDirectory = null;
         if (upload)
         {
-            if (!File.Exists(fullLocalPath))
-                throw new FileNotFoundException("The local source file does not exist.", fullLocalPath);
-            if (!remotePath.StartsWith("/", StringComparison.Ordinal))
-                throw new ArgumentException("Remote destination directory must be an absolute POSIX path.", nameof(remotePath));
-            localTransferPath = fullLocalPath;
-            remoteTransferPath = EnsureRemoteDirectory(remotePath);
-            destinationPath = remoteTransferPath + Path.GetFileName(fullLocalPath);
+            sourceIsDirectory = Directory.Exists(fullLocalPath)
+                ? true
+                : File.Exists(fullLocalPath) ? false : null;
+            if (sourceIsDirectory is null)
+                throw new FileNotFoundException("The local source file or directory does not exist.", fullLocalPath);
+            if ((File.GetAttributes(fullLocalPath) & FileAttributes.ReparsePoint) != 0)
+                throw new IOException("Local symbolic-link or reparse-point sources are not supported by this MCP transfer tool.");
+            if (remotePath == "/")
+                throw new ArgumentException("The remote destination must include a file or directory name; refusing the filesystem root.", remoteParameterName);
         }
         else
         {
-            if (!Directory.Exists(fullLocalPath))
-                throw new DirectoryNotFoundException("The local destination directory does not exist.");
-            var remoteFileName = GetRemoteFileName(remotePath);
-            localTransferPath = Path.TrimEndingDirectorySeparator(fullLocalPath) + Path.DirectorySeparatorChar;
-            remoteTransferPath = remotePath;
-            destinationPath = Path.Combine(fullLocalPath, remoteFileName);
-            if (!overwrite && (File.Exists(destinationPath) || Directory.Exists(destinationPath)))
-                throw new IOException("The local destination already contains an item with the same name. Set overwrite=true to replace it.");
+            var localParent = Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(fullLocalPath));
+            if (string.IsNullOrWhiteSpace(localParent) || !Directory.Exists(localParent))
+                throw new DirectoryNotFoundException("The local destination parent directory does not exist.");
         }
 
         var profiles = await new SessionRepository().LoadAsync(cancellationToken).ConfigureAwait(false);
@@ -220,21 +220,53 @@ public sealed class SshTools
 
         try
         {
-            if (upload && !overwrite)
+            bool LogHostKey(SshHostKeyInfo key)
             {
-                bool LogHostKey(SshHostKeyInfo key)
+                log.Append(Encoding.UTF8.GetBytes(
+                    $"[host-key] {key.Host}:{key.Port} {key.Algorithm} {key.FingerprintSha256}{Environment.NewLine}"));
+                return true;
+            }
+
+            if (upload)
+            {
+                var existingDestination = await FindRemoteEntryAsync(
+                    profile, authentication, route, remotePath, LogHostKey, linked.Token).ConfigureAwait(false);
+                if (existingDestination?.IsSymbolicLink == true)
+                    throw new IOException("The remote destination is a symbolic link; refusing to overwrite through it.");
+                ValidateDestinationConflict(
+                    existingDestination is not null,
+                    existingDestination?.IsDirectory,
+                    sourceIsDirectory!.Value,
+                    overwrite,
+                    "remote");
+            }
+            else
+            {
+                if (remotePath == "/")
                 {
-                    log.Append(Encoding.UTF8.GetBytes(
-                        $"[host-key] {key.Host}:{key.Port} {key.Algorithm} {key.FingerprintSha256}{Environment.NewLine}"));
-                    return true;
+                    sourceIsDirectory = true;
                 }
-                var listing = await new RemoteFileService().ListAsync(
-                    profile, authentication, LogHostKey, remotePath, route, linked.Token).ConfigureAwait(false);
-                if (listing.IsTruncated)
-                    throw new IOException("The remote directory listing is truncated, so overwrite safety cannot be verified. Choose a narrower directory or set overwrite=true.");
-                var fileName = Path.GetFileName(fullLocalPath);
-                if (listing.Entries.Any(entry => string.Equals(entry.Name, fileName, StringComparison.Ordinal)))
-                    throw new IOException("The remote destination already contains an item with the same name. Set overwrite=true to replace it.");
+                else
+                {
+                    var source = await FindRemoteEntryAsync(
+                        profile, authentication, route, remotePath, LogHostKey, linked.Token).ConfigureAwait(false)
+                        ?? throw new FileNotFoundException("The remote source file or directory does not exist.");
+                    if (source.IsSymbolicLink)
+                        throw new IOException("Symbolic-link sources are not supported by this MCP transfer tool.");
+                    sourceIsDirectory = source.IsDirectory;
+                }
+
+                var localFileExists = File.Exists(fullLocalPath);
+                var localDirectoryExists = Directory.Exists(fullLocalPath);
+                if ((localFileExists || localDirectoryExists) &&
+                    (File.GetAttributes(fullLocalPath) & FileAttributes.ReparsePoint) != 0)
+                    throw new IOException("The local destination is a symbolic link or reparse point; refusing to overwrite through it.");
+                ValidateDestinationConflict(
+                    localFileExists || localDirectoryExists,
+                    localDirectoryExists ? true : localFileExists ? false : null,
+                    sourceIsDirectory.Value,
+                    overwrite,
+                    "local");
             }
 
             var service = new RsyncWorkerTransferService(workerPath);
@@ -250,24 +282,29 @@ public sealed class SshTools
                 Direction = upload ? RsyncTransferDirection.Upload : RsyncTransferDirection.Download,
                 Profile = profile,
                 Route = route,
-                LocalPath = localTransferPath,
-                RemotePath = remoteTransferPath,
+                LocalPath = fullLocalPath,
+                RemotePath = remotePath,
+                CopyContents = sourceIsDirectory!.Value,
                 PreservePermissions = false,
                 PreserveLinks = false,
                 Compress = true,
             }, authentication, linked.Token).ConfigureAwait(false);
 
             stopwatch.Stop();
-            var bytes = upload
-                ? new FileInfo(fullLocalPath).Length
-                : File.Exists(destinationPath) ? new FileInfo(destinationPath).Length : transferredBytes;
-            return new FileTransferResult(
+            long? dataBytes = sourceIsDirectory.Value
+                ? null
+                : upload
+                    ? new FileInfo(fullLocalPath).Length
+                    : File.Exists(fullLocalPath) ? new FileInfo(fullLocalPath).Length : null;
+            return new RsyncPathTransferResult(
                 profile.Id,
                 profile.Name,
                 upload ? "upload" : "download",
-                upload ? fullLocalPath : destinationPath,
-                upload ? destinationPath : remotePath,
-                bytes,
+                sourceIsDirectory.Value ? "directory" : "file",
+                fullLocalPath,
+                remotePath,
+                dataBytes,
+                transferredBytes,
                 overwrite,
                 true,
                 log.GetText().TrimEnd(),
@@ -289,6 +326,39 @@ public sealed class SshTools
         }
     }
 
+    private static async Task<RemoteFileEntry?> FindRemoteEntryAsync(
+        ConnectionProfile profile,
+        SshAuthenticationOptions authentication,
+        IReadOnlyList<ConnectionProfile> route,
+        string path,
+        Func<SshHostKeyInfo, bool> verifyHostKey,
+        CancellationToken cancellationToken)
+    {
+        var (parent, name) = SplitRemotePath(path);
+        var listing = await new RemoteFileService().ListAsync(
+            profile, authentication, verifyHostKey, parent, route, cancellationToken).ConfigureAwait(false);
+        var entry = listing.Entries.FirstOrDefault(item =>
+            string.Equals(item.Name, name, StringComparison.Ordinal));
+        if (entry is null && listing.IsTruncated)
+            throw new IOException("The remote parent directory listing is truncated, so the requested path cannot be checked safely.");
+        return entry;
+    }
+
+    private static void ValidateDestinationConflict(
+        bool exists,
+        bool? destinationIsDirectory,
+        bool sourceIsDirectory,
+        bool overwrite,
+        string side)
+    {
+        if (!exists)
+            return;
+        if (!overwrite)
+            throw new IOException($"The {side} destination already exists. Set overwrite=true to replace a file or merge a directory.");
+        if (destinationIsDirectory != sourceIsDirectory)
+            throw new IOException($"The {side} destination has a different type from the source; refusing to replace a file with a directory or a directory with a file.");
+    }
+
     internal static string? ResolveRsyncWorkerPath(string? baseDirectory = null)
     {
         var root = Path.GetFullPath(baseDirectory ?? AppContext.BaseDirectory);
@@ -308,17 +378,33 @@ public sealed class SshTools
         return Path.GetFullPath(expanded);
     }
 
-    private static string EnsureRemoteDirectory(string path) =>
-        path.EndsWith("/", StringComparison.Ordinal) ? path : path + "/";
-
-    private static string GetRemoteFileName(string path)
+    private static void ValidateExactLocalDestinationPath(string path, string parameterName)
     {
-        if (!path.StartsWith("/", StringComparison.Ordinal) || path.EndsWith("/", StringComparison.Ordinal))
-            throw new ArgumentException("Remote source must be an absolute file path.", nameof(path));
+        var expanded = Environment.ExpandEnvironmentVariables(path);
+        if (Path.EndsInDirectorySeparator(expanded))
+            throw new ArgumentException("Local destination must be an exact file or directory path without a trailing separator.", parameterName);
+    }
+
+    internal static (string Parent, string Name) SplitRemotePath(string path)
+    {
+        ValidateAbsoluteRemotePath(path, nameof(path));
+        if (path == "/")
+            throw new ArgumentException("The filesystem root has no parent entry.", nameof(path));
+        var separator = path.LastIndexOf('/');
+        return (separator == 0 ? "/" : path[..separator], path[(separator + 1)..]);
+    }
+
+    private static void ValidateAbsoluteRemotePath(string path, string parameterName)
+    {
+        if (path.IndexOfAny(['\0', '\r', '\n']) >= 0)
+            throw new ArgumentException("Remote path cannot contain NUL or line-break characters.", parameterName);
+        if (!path.StartsWith("/", StringComparison.Ordinal))
+            throw new ArgumentException("Remote path must be an absolute POSIX path.", parameterName);
+        if (path.Length > 1 && path.EndsWith("/", StringComparison.Ordinal))
+            throw new ArgumentException("Remote path must be an exact file or directory path without a trailing slash.", parameterName);
         var name = path[(path.LastIndexOf('/') + 1)..];
-        if (name.Length == 0 || name is "." or "..")
-            throw new ArgumentException("Remote source must identify a file.", nameof(path));
-        return name;
+        if (name is "." or "..")
+            throw new ArgumentException("Remote path must not end with '.' or '..'.", parameterName);
     }
 
     internal static ConnectionProfile ResolveProfile(
@@ -509,13 +595,15 @@ public sealed record RemoteScriptResult(
     bool StandardErrorTruncated,
     long DurationMilliseconds);
 
-public sealed record FileTransferResult(
+public sealed record RsyncPathTransferResult(
     string SessionId,
     string SessionName,
     string Direction,
+    string SourceType,
     string LocalPath,
     string RemotePath,
-    long BytesTransferred,
+    long? DataBytes,
+    long ProtocolBytesTransferred,
     bool Overwrite,
     bool Compress,
     string Log,

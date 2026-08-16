@@ -108,8 +108,10 @@ To make saved sessions available to Codex globally, register that executable:
 codex mcp add ssh_win_gui -- D:\ssh-win-gui-win-x64\tools\mcp\ssh-win-gui-mcp.exe
 ```
 
-The MCP server exposes `list_sessions`, `run_script`, `upload_file`, and
-`download_file`. `run_script` sends the
+The MCP server exposes `list_sessions`, `run_script`, `rsync_upload`, and
+`rsync_download`. The rsync tools transfer files or recursive directories to
+exact user-selected destination paths and can rename them during transfer.
+`run_script` sends the
 UTF-8 script directly to remote `sh -s` over SSH stdin, avoiding a local
 PowerShell/`ssh.exe` quoting layer. It reuses saved private-key, SOCKS5 and jump
 routes and strictly requires a fingerprint already approved by the GUI. It
