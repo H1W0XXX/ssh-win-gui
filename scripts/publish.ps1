@@ -145,8 +145,8 @@ try {
     if (-not $SkipTests) {
         Invoke-Checked -FilePath "go" -ArgumentList @("test", "./...") -WorkingDirectory $workerSource
         Invoke-Checked -FilePath "go" -ArgumentList @("vet", "./...") -WorkingDirectory $workerSource
-        Invoke-Checked -FilePath "go" -ArgumentList @("test", "./internal/sender", "./internal/receiver") -WorkingDirectory $vendorRsyncSource
-        Invoke-Checked -FilePath "go" -ArgumentList @("vet", "./internal/sender", "./internal/receiver") -WorkingDirectory $vendorRsyncSource
+        Invoke-Checked -FilePath "go" -ArgumentList @("test", "./internal/maincmd", "./internal/sender", "./internal/receiver") -WorkingDirectory $vendorRsyncSource
+        Invoke-Checked -FilePath "go" -ArgumentList @("vet", "./internal/maincmd", "./internal/sender", "./internal/receiver") -WorkingDirectory $vendorRsyncSource
     }
 
     $solution = Join-Path $repoRoot "RsyncShell.sln"

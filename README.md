@@ -102,6 +102,11 @@ not create timestamped package directories. The package includes SHA-256
 checksums and only English/Simplified-Chinese UI resources. It also publishes
 the self-contained STDIO MCP server at `tools\mcp\ssh-win-gui-mcp.exe`.
 
+GitHub Actions runs the same publisher for every push and pull request, and it
+can also be started manually from the Actions tab. Download the
+`ssh-win-gui-win-x64` workflow artifact when a local .NET/Go toolchain is not
+available.
+
 To make saved sessions available to Codex globally, register that executable:
 
 ```powershell

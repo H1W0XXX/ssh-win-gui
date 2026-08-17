@@ -21,6 +21,7 @@ public sealed record RsyncTransferRequest
     public required string LocalPath { get; init; }
     public required string RemotePath { get; init; }
     public bool CopyContents { get; init; }
+    public bool ExactDestination { get; init; }
     public bool PreserveTimes { get; init; } = true;
     public bool PreservePermissions { get; init; } = true;
     public bool PreserveLinks { get; init; } = true;

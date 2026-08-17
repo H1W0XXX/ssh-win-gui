@@ -2,6 +2,7 @@ package maincmd
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -26,6 +27,22 @@ func TestSetExactDestinationRewritesSingleFile(t *testing.T) {
 }
 
 func TestSetExactDestinationRejectsDirectory(t *testing.T) {
+	destination := filepath.Join(t.TempDir(), "existing")
+	if err := os.Mkdir(destination, 0755); err != nil {
+		t.Fatal(err)
+	}
+	rt := &receiver.Transfer{Dest: destination}
+	files := []*receiver.File{{Name: "original.txt", Mode: rsync.S_IFREG}}
+
+	if err := setExactDestination(rt, files); err == nil {
+		t.Fatal("existing destination directory unexpectedly accepted as an exact file destination")
+	}
+	if info, err := os.Stat(destination); err != nil || !info.IsDir() {
+		t.Fatalf("destination directory was changed: info=%v err=%v", info, err)
+	}
+}
+
+func TestSetExactDestinationRejectsDirectorySource(t *testing.T) {
 	rt := &receiver.Transfer{Dest: filepath.Join("root", "renamed")}
 	files := []*receiver.File{{Name: "original", Mode: rsync.S_IFDIR}}
 

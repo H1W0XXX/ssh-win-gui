@@ -31,7 +31,7 @@ public sealed class RsyncWorkerException : Exception
 
 public sealed class RsyncWorkerTransferService
 {
-    private const int ProtocolVersion = 3;
+    private const int ProtocolVersion = 4;
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -338,7 +338,7 @@ public sealed class RsyncWorkerTransferService
         }
     }
 
-    private static object BuildTransferMessage(
+    internal static object BuildTransferMessage(
         string requestId,
         RsyncTransferRequest request,
         SshAuthenticationOptions authentication)
@@ -356,6 +356,7 @@ public sealed class RsyncWorkerTransferService
                 request.LocalPath,
                 request.RemotePath,
                 request.CopyContents,
+                request.ExactDestination,
                 remote,
                 options = new
                 {

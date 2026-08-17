@@ -388,6 +388,38 @@ public sealed class CoreContractsTests
         };
 
         Assert.True(request.Compress);
+        Assert.False(request.ExactDestination);
+    }
+
+    [Fact]
+    public void RsyncWorkerMessageCarriesExplicitExactDestinationMode()
+    {
+        var request = new RsyncTransferRequest
+        {
+            Direction = RsyncTransferDirection.Download,
+            Profile = new ConnectionProfile
+            {
+                Id = "test",
+                Name = "test",
+                Host = "server.example",
+                Username = "user",
+            },
+            LocalPath = @"C:\Downloads\renamed.txt",
+            RemotePath = "/srv/original.txt",
+            ExactDestination = true,
+        };
+        var authentication = new SshAuthenticationOptions
+        {
+            Kind = SshAuthenticationKind.Password,
+            Password = "not-serialized",
+        };
+
+        var message = RsyncWorkerTransferService.BuildTransferMessage("request-test", request, authentication);
+        using var document = JsonDocument.Parse(JsonSerializer.Serialize(message));
+        var transfer = document.RootElement.GetProperty("transfer");
+
+        Assert.True(transfer.GetProperty("ExactDestination").GetBoolean());
+        Assert.False(transfer.GetProperty("CopyContents").GetBoolean());
     }
 
     [Fact]

@@ -441,6 +441,13 @@ func setExactDestination(rt *receiver.Transfer, fileList []*receiver.File) error
 	if name == "." || name == string(filepath.Separator) {
 		return fmt.Errorf("exact destination must include a file name")
 	}
+	if info, err := os.Lstat(destination); err == nil {
+		if !info.Mode().IsRegular() {
+			return fmt.Errorf("exact destination %s is not a regular file", destination)
+		}
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("inspect exact destination %s: %v", destination, err)
+	}
 	rt.Dest = filepath.Dir(destination)
 	fileList[0].Name = name
 	return nil

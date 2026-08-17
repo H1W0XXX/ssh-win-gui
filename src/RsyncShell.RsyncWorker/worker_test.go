@@ -79,6 +79,32 @@ func TestValidateTransferRejectsUnsupportedFeatures(t *testing.T) {
 	base = validRequest()
 	base.RemotePath = "~/relative"
 	assertErrorCode(t, validateTransferRequest(&base), "invalid_request")
+
+	base = validRequest()
+	base.ExactDestination = true
+	assertErrorCode(t, validateTransferRequest(&base), "invalid_request")
+
+	base = validRequest()
+	base.Direction = "download"
+	base.ExactDestination = true
+	base.CopyContents = true
+	assertErrorCode(t, validateTransferRequest(&base), "invalid_request")
+}
+
+func TestValidateTransferDistinguishesDirectoryAndExactFileDestinations(t *testing.T) {
+	directoryDestination := validRequest()
+	directoryDestination.Direction = "download"
+	directoryDestination.LocalPath = `C:\Downloads\`
+	if err := validateTransferRequest(&directoryDestination); err != nil {
+		t.Fatalf("directory destination rejected: %v", err)
+	}
+
+	exactFileDestination := directoryDestination
+	exactFileDestination.LocalPath = `C:\Downloads\renamed.txt`
+	exactFileDestination.ExactDestination = true
+	if err := validateTransferRequest(&exactFileDestination); err != nil {
+		t.Fatalf("exact file destination rejected: %v", err)
+	}
 }
 
 func TestRsyncLogWriterBoundsAndContinuesAfterLongLines(t *testing.T) {

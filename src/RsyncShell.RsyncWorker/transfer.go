@@ -47,6 +47,12 @@ func validateTransferRequest(req *TransferRequest) error {
 	if req.Options.Delete {
 		return errorCode("unsupported_option", errors.New("delete is disabled because the pinned Go rsync implementation does not reliably forward it to the remote receiver"))
 	}
+	if req.ExactDestination && req.Direction != "download" {
+		return errorCode("invalid_request", errors.New("exactDestination is only valid for downloads"))
+	}
+	if req.ExactDestination && req.CopyContents {
+		return errorCode("invalid_request", errors.New("exactDestination cannot be combined with copyContents"))
+	}
 	if err := validateTransferOptions(req.Options); err != nil {
 		return err
 	}
@@ -126,7 +132,7 @@ func runRsyncOverSSH(ctx context.Context, sshClient *ssh.Client, req TransferReq
 	clientOptions := []rsyncclient.Option{rsyncclient.WithStderr(&rsyncLogWriter{reporter: reporter, level: "info"})}
 	if req.Direction == "upload" {
 		clientOptions = append(clientOptions, rsyncclient.WithSender())
-	} else if !req.CopyContents {
+	} else if req.ExactDestination {
 		clientOptions = append(clientOptions, rsyncclient.WithExactDestination())
 	}
 	client, err := rsyncclient.New(args, clientOptions...)

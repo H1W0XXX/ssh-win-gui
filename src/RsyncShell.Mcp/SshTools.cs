@@ -284,6 +284,7 @@ public sealed class SshTools
                 LocalPath = fullLocalPath,
                 RemotePath = remotePath,
                 CopyContents = sourceIsDirectory!.Value,
+                ExactDestination = !upload && !sourceIsDirectory.Value,
                 PreservePermissions = false,
                 PreserveLinks = false,
                 Compress = true,

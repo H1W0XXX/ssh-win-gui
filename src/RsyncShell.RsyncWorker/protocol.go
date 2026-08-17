@@ -6,7 +6,7 @@ import (
 	"github.com/gokrazy/rsync"
 )
 
-const ipcProtocolVersion = 3
+const ipcProtocolVersion = 4
 
 type InboundMessage struct {
 	Type           string                 `json:"type"`
@@ -18,12 +18,13 @@ type InboundMessage struct {
 }
 
 type TransferRequest struct {
-	Direction    string          `json:"direction"`
-	LocalPath    string          `json:"localPath"`
-	RemotePath   string          `json:"remotePath"`
-	CopyContents bool            `json:"copyContents,omitempty"`
-	Remote       RemoteEndpoint  `json:"remote"`
-	Options      TransferOptions `json:"options,omitempty"`
+	Direction        string          `json:"direction"`
+	LocalPath        string          `json:"localPath"`
+	RemotePath       string          `json:"remotePath"`
+	CopyContents     bool            `json:"copyContents,omitempty"`
+	ExactDestination bool            `json:"exactDestination,omitempty"`
+	Remote           RemoteEndpoint  `json:"remote"`
+	Options          TransferOptions `json:"options,omitempty"`
 }
 
 type RemoteTransferRequest struct {
