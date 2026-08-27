@@ -88,6 +88,23 @@ public partial class SessionDialog : System.Windows.Window
 
     private void SaveConnectButton_OnClick(object sender, System.Windows.RoutedEventArgs e) => Complete(connect: true);
 
+    private void TrimTextInput_OnLostKeyboardFocus(
+        object sender,
+        System.Windows.Input.KeyboardFocusChangedEventArgs e)
+    {
+        switch (sender)
+        {
+            case System.Windows.Controls.TextBox textBox:
+                textBox.Text = TrimOuterWhitespace(textBox.Text);
+                break;
+            case System.Windows.Controls.ComboBox comboBox when comboBox.IsEditable:
+                comboBox.Text = TrimOuterWhitespace(comboBox.Text);
+                break;
+        }
+    }
+
+    internal static string TrimOuterWhitespace(string? value) => value?.Trim() ?? string.Empty;
+
     internal static IReadOnlyList<string> BuildGroupChoices(
         IEnumerable<ConnectionProfile> savedProfiles,
         string? currentGroup = null)
@@ -144,11 +161,20 @@ public partial class SessionDialog : System.Windows.Window
     private void Complete(bool connect)
     {
         ValidationText.Text = string.Empty;
-        var name = NameInput.Text.Trim();
-        var host = HostInput.Text.Trim();
-        var username = UsernameInput.Text.Trim();
-        var group = GroupInput.Text.Trim();
-        var privateKeyPath = Environment.ExpandEnvironmentVariables(PrivateKeyInput.Text.Trim());
+        NameInput.Text = TrimOuterWhitespace(NameInput.Text);
+        HostInput.Text = TrimOuterWhitespace(HostInput.Text);
+        PortInput.Text = TrimOuterWhitespace(PortInput.Text);
+        UsernameInput.Text = TrimOuterWhitespace(UsernameInput.Text);
+        GroupInput.Text = TrimOuterWhitespace(GroupInput.Text);
+        PrivateKeyInput.Text = TrimOuterWhitespace(PrivateKeyInput.Text);
+        ProxyHostInput.Text = TrimOuterWhitespace(ProxyHostInput.Text);
+        ProxyPortInput.Text = TrimOuterWhitespace(ProxyPortInput.Text);
+
+        var name = NameInput.Text;
+        var host = HostInput.Text;
+        var username = UsernameInput.Text;
+        var group = GroupInput.Text;
+        var privateKeyPath = Environment.ExpandEnvironmentVariables(PrivateKeyInput.Text);
 
         if (name.Length == 0)
         {
@@ -165,7 +191,7 @@ public partial class SessionDialog : System.Windows.Window
             ValidationText.Text = LocalizationService.Get("ErrorUsernameRequired");
             return;
         }
-        if (!int.TryParse(PortInput.Text.Trim(), NumberStyles.None, CultureInfo.InvariantCulture, out var port) ||
+        if (!int.TryParse(PortInput.Text, NumberStyles.None, CultureInfo.InvariantCulture, out var port) ||
             port is < 1 or > 65535)
         {
             ValidationText.Text = LocalizationService.Get("ErrorPortRange");
@@ -177,7 +203,7 @@ public partial class SessionDialog : System.Windows.Window
             return;
         }
         var proxyKind = (ProxyTypeInput.SelectedItem as ProxyChoice)?.Kind ?? SshProxyKind.None;
-        var proxyHost = ProxyHostInput.Text.Trim();
+        var proxyHost = ProxyHostInput.Text;
         if (proxyKind == SshProxyKind.Socks5 && proxyHost.Length == 0)
         {
             ValidationText.Text = LocalizationService.Get("ErrorProxyHostRequired");
@@ -185,7 +211,7 @@ public partial class SessionDialog : System.Windows.Window
         }
         var proxyPort = 1080;
         if (proxyKind == SshProxyKind.Socks5 &&
-            (!int.TryParse(ProxyPortInput.Text.Trim(), NumberStyles.None, CultureInfo.InvariantCulture, out proxyPort) ||
+            (!int.TryParse(ProxyPortInput.Text, NumberStyles.None, CultureInfo.InvariantCulture, out proxyPort) ||
              proxyPort is < 1 or > 65535))
         {
             ValidationText.Text = LocalizationService.Get("ErrorProxyPortRange");

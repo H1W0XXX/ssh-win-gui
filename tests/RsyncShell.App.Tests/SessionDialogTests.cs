@@ -5,6 +5,16 @@ namespace RsyncShell.App.Tests;
 
 public sealed class SessionDialogTests
 {
+    [Theory]
+    [InlineData("  172.31.0.25  ", "172.31.0.25")]
+    [InlineData("\t1080\r\n", "1080")]
+    [InlineData("\u3000root\u00A0", "root")]
+    [InlineData(null, "")]
+    public void TrimOuterWhitespaceRemovesOnlyLeadingAndTrailingWhitespace(string? value, string expected)
+    {
+        Assert.Equal(expected, SessionDialog.TrimOuterWhitespace(value));
+    }
+
     [Fact]
     public void GroupChoicesIncludeDefaultExistingAndCurrentWithoutCaseDuplicates()
     {

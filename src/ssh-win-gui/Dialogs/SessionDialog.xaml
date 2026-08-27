@@ -31,16 +31,20 @@
             </Grid.RowDefinitions>
 
             <TextBlock Text="{DynamicResource SessionName}" VerticalAlignment="Center" Margin="0,0,10,10" />
-            <TextBox x:Name="NameInput" Grid.Column="1" Margin="0,0,0,10" Padding="7,4" />
+            <TextBox x:Name="NameInput" Grid.Column="1" Margin="0,0,0,10" Padding="7,4"
+                     LostKeyboardFocus="TrimTextInput_OnLostKeyboardFocus" />
 
             <TextBlock Grid.Row="1" Text="{DynamicResource Host}" VerticalAlignment="Center" Margin="0,0,10,10" />
-            <TextBox x:Name="HostInput" Grid.Row="1" Grid.Column="1" Margin="0,0,0,10" Padding="7,4" />
+            <TextBox x:Name="HostInput" Grid.Row="1" Grid.Column="1" Margin="0,0,0,10" Padding="7,4"
+                     LostKeyboardFocus="TrimTextInput_OnLostKeyboardFocus" />
 
             <TextBlock Grid.Row="2" Text="{DynamicResource Port}" VerticalAlignment="Center" Margin="0,0,10,10" />
-            <TextBox x:Name="PortInput" Grid.Row="2" Grid.Column="1" Width="110" HorizontalAlignment="Left" Margin="0,0,0,10" Padding="7,4" />
+            <TextBox x:Name="PortInput" Grid.Row="2" Grid.Column="1" Width="110" HorizontalAlignment="Left" Margin="0,0,0,10" Padding="7,4"
+                     LostKeyboardFocus="TrimTextInput_OnLostKeyboardFocus" />
 
             <TextBlock Grid.Row="3" Text="{DynamicResource Username}" VerticalAlignment="Center" Margin="0,0,10,10" />
-            <TextBox x:Name="UsernameInput" Grid.Row="3" Grid.Column="1" Margin="0,0,0,10" Padding="7,4" />
+            <TextBox x:Name="UsernameInput" Grid.Row="3" Grid.Column="1" Margin="0,0,0,10" Padding="7,4"
+                     LostKeyboardFocus="TrimTextInput_OnLostKeyboardFocus" />
 
             <TextBlock Grid.Row="4" Text="{DynamicResource Group}" VerticalAlignment="Center" Margin="0,0,10,10" />
             <ComboBox x:Name="GroupInput"
@@ -50,7 +54,8 @@
                       Padding="7,4"
                       IsEditable="True"
                       IsTextSearchEnabled="True"
-                      StaysOpenOnEdit="True" />
+                      StaysOpenOnEdit="True"
+                      LostKeyboardFocus="TrimTextInput_OnLostKeyboardFocus" />
 
             <TextBlock Grid.Row="5" Text="{DynamicResource PrivateKeyOptional}" VerticalAlignment="Center" Margin="0,0,10,10" />
             <Grid Grid.Row="5" Grid.Column="1" Margin="0,0,0,10">
@@ -62,7 +67,8 @@
                           Padding="7,4"
                           IsEditable="True"
                           IsTextSearchEnabled="True"
-                          StaysOpenOnEdit="True" />
+                          StaysOpenOnEdit="True"
+                          LostKeyboardFocus="TrimTextInput_OnLostKeyboardFocus" />
                 <Button Grid.Column="1" Content="{DynamicResource Browse}" Margin="7,0,0,0" Padding="11,4" Click="BrowseButton_OnClick" />
             </Grid>
 
@@ -77,8 +83,10 @@
                     <ColumnDefinition Width="10" />
                     <ColumnDefinition Width="100" />
                 </Grid.ColumnDefinitions>
-                <TextBox x:Name="ProxyHostInput" Padding="7,4" />
-                <TextBox x:Name="ProxyPortInput" Grid.Column="2" Padding="7,4" />
+                <TextBox x:Name="ProxyHostInput" Padding="7,4"
+                         LostKeyboardFocus="TrimTextInput_OnLostKeyboardFocus" />
+                <TextBox x:Name="ProxyPortInput" Grid.Column="2" Padding="7,4"
+                         LostKeyboardFocus="TrimTextInput_OnLostKeyboardFocus" />
             </Grid>
             <ComboBox x:Name="JumpProfileInput" Grid.Row="7" Grid.Column="1" Margin="0,0,0,10" Padding="7,4"
                       DisplayMemberPath="Display" />
