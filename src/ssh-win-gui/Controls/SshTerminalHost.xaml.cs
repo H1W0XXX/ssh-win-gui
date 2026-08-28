@@ -302,9 +302,9 @@ public partial class SshTerminalHost : System.Windows.Controls.UserControl, ITer
     {
         if (_terminalMouseHooked || _terminalContainer is null) return;
 
-        // TerminalContainer already delegates keyboard messages to Microsoft's
-        // VT input engine. Intercepting them here would lose application-cursor
-        // mode and can double-send keys to full-screen programs.
+        // TerminalContainer delegates functional keyboard messages to Microsoft's
+        // VT input engine. The hook leaves those intact and only suppresses narrow
+        // default-window artifacts such as menu activation and warning sounds.
         _terminalContainer.MessageHook += TerminalContainerMessageHook;
         _terminalMouseHooked = true;
         ComponentDispatcher.ThreadPreprocessMessage += OnThreadPreprocessMessage;
@@ -317,8 +317,23 @@ public partial class SshTerminalHost : System.Windows.Controls.UserControl, ITer
     {
         try
         {
-            if (_disposed || handled || !IsKeyboardMessage(message.message) ||
-                (_connection is null && _passwordPrompt is null) || !OwnsNativeWindow(message.hwnd))
+            if (_disposed || handled || (_connection is null && _passwordPrompt is null))
+            {
+                return;
+            }
+
+            // A bare Alt release is converted into SC_KEYMENU for the top-level
+            // WPF window, not the focused terminal child HWND. Consume it before
+            // WPF moves focus to the first menu item, but only while this terminal
+            // actually owns the thread's native keyboard focus.
+            if (IsStandaloneMenuActivation(message.message, message.wParam, message.lParam) &&
+                OwnsNativeWindow(GetFocus()))
+            {
+                handled = true;
+                return;
+            }
+
+            if (!IsKeyboardMessage(message.message) || !OwnsNativeWindow(message.hwnd))
             {
                 return;
             }
@@ -360,6 +375,16 @@ public partial class SshTerminalHost : System.Windows.Controls.UserControl, ITer
         }
 
         var key = e.Key == Key.System ? e.SystemKey : e.Key;
+        if (ShouldSuppressWpfMenuActivation(key))
+        {
+            // WPF's KeyboardNavigation tracks an unhandled Alt key-down and
+            // enters menu mode on the matching key-up. Marking the key-down as
+            // handled keeps focus in the native terminal; modifier state is
+            // still available to Microsoft's terminal input engine.
+            e.Handled = true;
+            return;
+        }
+
         if (key == Key.Insert &&
             (Keyboard.Modifiers & (ModifierKeys.Shift | ModifierKeys.Control | ModifierKeys.Alt)) == ModifierKeys.Shift)
         {
@@ -391,6 +416,9 @@ public partial class SshTerminalHost : System.Windows.Controls.UserControl, ITer
         e.Handled = true;
     }
 
+    internal static bool ShouldSuppressWpfMenuActivation(Key key) =>
+        key is Key.LeftAlt or Key.RightAlt;
+
     internal static bool ShouldForwardNativeNavigationKey(Key key, ModifierKeys modifiers) =>
         key switch
         {
@@ -405,6 +433,16 @@ public partial class SshTerminalHost : System.Windows.Controls.UserControl, ITer
 
     private static bool IsKeyboardMessage(int message) =>
         message is 0x0100 or 0x0101 or 0x0104 or 0x0105;
+
+    internal static bool IsStandaloneMenuActivation(int message, IntPtr wParam, IntPtr lParam)
+    {
+        const int WmSysCommand = 0x0112;
+        const long SystemCommandMask = 0xFFF0;
+        const long ScKeyMenu = 0xF100;
+        return message == WmSysCommand &&
+               (wParam.ToInt64() & SystemCommandMask) == ScKeyMenu &&
+               lParam == IntPtr.Zero;
+    }
 
     internal static int ExtractVirtualKey(IntPtr wParam) =>
         unchecked((int)wParam.ToInt64()) & 0xFFFF;
@@ -436,6 +474,16 @@ public partial class SshTerminalHost : System.Windows.Controls.UserControl, ITer
                (hwnd == terminalHandle || IsChild(terminalHandle, hwnd));
     }
 
+    internal static bool IsAltBackspaceSystemCharacter(int message, IntPtr wParam, IntPtr lParam)
+    {
+        const int WmSysChar = 0x0106;
+        const int BackspaceCharacter = 0x08;
+        const long AltContextMask = 1L << 29;
+        return message == WmSysChar &&
+               ExtractVirtualKey(wParam) == BackspaceCharacter &&
+               (lParam.ToInt64() & AltContextMask) != 0;
+    }
+
     private IntPtr TerminalContainerMessageHook(
         IntPtr hwnd,
         int message,
@@ -449,6 +497,16 @@ public partial class SshTerminalHost : System.Windows.Controls.UserControl, ITer
 
         if (_disposed || _terminalContainer is null || hwnd != _terminalContainer.Handle)
         {
+            return IntPtr.Zero;
+        }
+
+        // Microsoft Terminal consumes the native Alt+Backspace key event, but
+        // the translated WM_SYSCHAR can fall through to default window handling
+        // and play the Windows warning sound. Consume only that translated
+        // character so the terminal keeps its native key handling.
+        if (IsAltBackspaceSystemCharacter(message, wParam, lParam))
+        {
+            handled = true;
             return IntPtr.Zero;
         }
 
@@ -741,6 +799,9 @@ public partial class SshTerminalHost : System.Windows.Controls.UserControl, ITer
 
     [DllImport("user32.dll")]
     private static extern IntPtr SetFocus(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetFocus();
 
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]

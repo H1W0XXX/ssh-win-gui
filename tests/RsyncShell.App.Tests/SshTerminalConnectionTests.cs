@@ -76,6 +76,16 @@ public sealed class SshTerminalConnectionTests
     }
 
     [Theory]
+    [InlineData(Key.LeftAlt, true)]
+    [InlineData(Key.RightAlt, true)]
+    [InlineData(Key.F10, false)]
+    [InlineData(Key.A, false)]
+    public void OnlyAltKeysSuppressWpfMenuActivation(Key key, bool expected)
+    {
+        Assert.Equal(expected, SshTerminalHost.ShouldSuppressWpfMenuActivation(key));
+    }
+
+    [Theory]
     [InlineData(0x0100, 0x2D, true, false, false, true, true)]
     [InlineData(0x0101, 0x2D, true, false, false, true, false)]
     [InlineData(0x0100, 0x2D, false, false, false, false, false)]
@@ -100,6 +110,45 @@ public sealed class SshTerminalConnectionTests
 
         Assert.Equal(expectedHandled, handled);
         Assert.Equal(expectedPaste, paste);
+    }
+
+    [Theory]
+    [InlineData(0x0106, 0x08, 1L << 29, true)]
+    [InlineData(0x0106, 0x08, 0, false)]
+    [InlineData(0x0106, 0x41, 1L << 29, false)]
+    [InlineData(0x0102, 0x08, 1L << 29, false)]
+    public void OnlyAltBackspaceSystemCharacterIsSuppressed(
+        int message,
+        int character,
+        long keyData,
+        bool expected)
+    {
+        Assert.Equal(
+            expected,
+            SshTerminalHost.IsAltBackspaceSystemCharacter(
+                message,
+                new IntPtr(character),
+                new IntPtr(keyData)));
+    }
+
+    [Theory]
+    [InlineData(0x0112, 0xF100, 0, true)]
+    [InlineData(0x0112, 0xF10F, 0, true)]
+    [InlineData(0x0112, 0xF100, 0x46, false)]
+    [InlineData(0x0112, 0xF060, 0, false)]
+    [InlineData(0x0105, 0xF100, 0, false)]
+    public void OnlyStandaloneSystemMenuActivationIsSuppressed(
+        int message,
+        int command,
+        int keyCharacter,
+        bool expected)
+    {
+        Assert.Equal(
+            expected,
+            SshTerminalHost.IsStandaloneMenuActivation(
+                message,
+                new IntPtr(command),
+                new IntPtr(keyCharacter)));
     }
 
     [Theory]
