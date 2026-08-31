@@ -383,6 +383,50 @@ func TestRouteCandidateKeepsSavedJumpOnlyWhenRequested(t *testing.T) {
 	}
 }
 
+func TestRouteProbeSupportsSocksFirstHopAndJumpTarget(t *testing.T) {
+	firstHop := validRequest().Remote
+	firstHop.Host = "machine-a.internal"
+	firstHop.Proxy = &ProxyConfig{Type: "socks5", Host: "127.0.0.1", Port: 11451}
+
+	publicJump := validRequest().Remote
+	publicJump.Host = "jump.example.test"
+	publicJump.Port = 60022
+	target := validRequest().Remote
+	target.Host = "machine-b.internal"
+	target.Proxy = &ProxyConfig{Type: "jump", Jump: &publicJump}
+
+	request := RouteProbeRequest{
+		FirstHop: firstHop,
+		Target:   target,
+		Candidates: []RouteCandidate{
+			{
+				Host:           target.Host,
+				Port:           target.Port,
+				InterfaceName:  "saved-jump-route",
+				UseTargetProxy: true,
+			},
+		},
+	}
+	if err := validateRouteProbeRequest(&request); err != nil {
+		t.Fatalf("SOCKS5 first hop with JumpHost target was rejected: %v", err)
+	}
+
+	selectedTarget := targetForRouteCandidate(target, request.Candidates[0])
+	command, err := buildInnerSSHCommand(selectedTarget)
+	if err != nil {
+		t.Fatalf("build inner SSH command: %v", err)
+	}
+	if !strings.Contains(command, "ProxyCommand=") || !strings.Contains(command, "jump.example.test") || !strings.Contains(command, "60022") {
+		t.Fatalf("inner SSH command does not preserve the public jump route: %q", command)
+	}
+	if strings.Count(command, "StrictHostKeyChecking=no") != 2 || strings.Count(command, "UserKnownHostsFile=/dev/null") != 2 {
+		t.Fatalf("host-key options were not applied to both target and jump SSH commands: %q", command)
+	}
+	if strings.Contains(command, "127.0.0.1") || strings.Contains(command, "11451") {
+		t.Fatalf("local SOCKS5 endpoint leaked into the A-to-B SSH command: %q", command)
+	}
+}
+
 func validRequest() TransferRequest {
 	return TransferRequest{
 		Direction:  "upload",

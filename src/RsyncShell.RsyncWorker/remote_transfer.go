@@ -245,11 +245,33 @@ func buildInnerSSHCommand(endpoint RemoteEndpoint) (string, error) {
 	if endpoint.Auth.Method != "private_key" {
 		return "", errorCode("unsupported_authentication", errors.New("remote-to-remote inner SSH requires private-key authentication"))
 	}
-	port := endpoint.Port
+	args := buildInnerSSHBaseArgs(endpoint.Port)
+	if endpoint.Proxy != nil {
+		switch endpoint.Proxy.Type {
+		case "", "none":
+		case "socks5":
+			return "", errorCode("unsupported_proxy", errors.New("an inner SOCKS5 proxy is not reachable from the first-hop machine"))
+		case "jump":
+			if endpoint.Proxy.Jump == nil {
+				return "", errorCode("invalid_request", errors.New("jump proxy is missing its SSH endpoint"))
+			}
+			proxyCommand, err := buildJumpProxyCommand(*endpoint.Proxy.Jump)
+			if err != nil {
+				return "", err
+			}
+			args = append(args, "-o", "ProxyCommand="+proxyCommand)
+		default:
+			return "", errorCode("unsupported_proxy", fmt.Errorf("unsupported inner proxy type %q", endpoint.Proxy.Type))
+		}
+	}
+	return joinShellArgs(args), nil
+}
+
+func buildInnerSSHBaseArgs(port int) []string {
 	if port == 0 {
 		port = 22
 	}
-	args := []string{
+	return []string{
 		"ssh",
 		"-p", strconv.Itoa(port),
 		"-o", "BatchMode=yes",
@@ -261,21 +283,32 @@ func buildInnerSSHCommand(endpoint RemoteEndpoint) (string, error) {
 		"-o", "UserKnownHostsFile=/dev/null",
 		"-o", "LogLevel=ERROR",
 	}
+}
+
+func buildJumpProxyCommand(endpoint RemoteEndpoint) (string, error) {
+	if endpoint.Auth.Method != "private_key" {
+		return "", errorCode("unsupported_authentication", errors.New("remote-to-remote jump SSH requires private-key authentication"))
+	}
+	args := buildInnerSSHBaseArgs(endpoint.Port)
 	if endpoint.Proxy != nil {
 		switch endpoint.Proxy.Type {
 		case "", "none":
 		case "socks5":
 			return "", errorCode("unsupported_proxy", errors.New("an inner SOCKS5 proxy is not reachable from the first-hop machine"))
 		case "jump":
-			jumps, err := buildProxyJumpChain(endpoint)
+			if endpoint.Proxy.Jump == nil {
+				return "", errorCode("invalid_request", errors.New("jump proxy is missing its SSH endpoint"))
+			}
+			proxyCommand, err := buildJumpProxyCommand(*endpoint.Proxy.Jump)
 			if err != nil {
 				return "", err
 			}
-			args = append(args, "-J", strings.Join(jumps, ","))
+			args = append(args, "-o", "ProxyCommand="+proxyCommand)
 		default:
 			return "", errorCode("unsupported_proxy", fmt.Errorf("unsupported inner proxy type %q", endpoint.Proxy.Type))
 		}
 	}
+	args = append(args, "-W", "%h:%p", formatSshDestination(endpoint))
 	return joinShellArgs(args), nil
 }
 

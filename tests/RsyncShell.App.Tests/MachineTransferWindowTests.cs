@@ -97,4 +97,27 @@ public sealed class MachineTransferWindowTests
             candidate.IsSavedEndpoint && candidate.UseTargetProxy);
         Assert.Single(candidates, candidate => candidate.Host == "10.0.0.12");
     }
+
+    [Fact]
+    public void RouteCandidatesKeepSavedJumpRouteWhenInventoryDiscoveryFails()
+    {
+        var profile = new ConnectionProfile
+        {
+            Id = "internal-target",
+            Name = "internal-target",
+            Host = "172.31.0.128",
+            Port = 22,
+            Username = "root",
+            ProxyKind = SshProxyKind.JumpHost,
+            JumpProfileId = "public-jump",
+        };
+
+        var candidates = MachineTransferWindow.BuildRouteCandidates(profile, inventory: null);
+
+        Assert.Equal(2, candidates.Count);
+        Assert.Contains(candidates, candidate =>
+            candidate.IsSavedEndpoint && !candidate.UseTargetProxy);
+        Assert.Contains(candidates, candidate =>
+            candidate.IsSavedEndpoint && candidate.UseTargetProxy);
+    }
 }

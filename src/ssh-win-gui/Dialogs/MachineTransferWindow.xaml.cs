@@ -337,13 +337,21 @@ public partial class MachineTransferWindow : Window
                 _verifyHostKey,
                 destinationRoute,
                 token);
-            await Task.WhenAll(sourceInventoryTask, destinationInventoryTask);
-            var sourceInventory = await sourceInventoryTask;
-            var destinationInventory = await destinationInventoryTask;
+            var sourceInventoryResult = CaptureInventoryAsync(sourceInventoryTask, source.Choice.Profile.Name);
+            var destinationInventoryResult = CaptureInventoryAsync(destinationInventoryTask, destination.Choice.Profile.Name);
+            await Task.WhenAll(sourceInventoryResult, destinationInventoryResult);
+            var sourceInventory = await sourceInventoryResult;
+            var destinationInventory = await destinationInventoryResult;
             var sourceCandidates = BuildRouteCandidates(source.Choice.Profile, sourceInventory);
             var destinationCandidates = BuildRouteCandidates(destination.Choice.Profile, destinationInventory);
-            AppendInventoryDiagnostic(source.Choice.Profile, sourceInventory, sourceCandidates);
-            AppendInventoryDiagnostic(destination.Choice.Profile, destinationInventory, destinationCandidates);
+            if (sourceInventory is not null)
+            {
+                AppendInventoryDiagnostic(source.Choice.Profile, sourceInventory, sourceCandidates);
+            }
+            if (destinationInventory is not null)
+            {
+                AppendInventoryDiagnostic(destination.Choice.Profile, destinationInventory, destinationCandidates);
+            }
 
             RouteProbeStatusText.Text = LocalizationService.Format(
                 "ProbingRouteCandidates",
@@ -352,40 +360,48 @@ public partial class MachineTransferWindow : Window
             var destinationProbeService = new RsyncWorkerTransferService(_workerPath);
             AttachProbeDiagnostics(sourceProbeService, source.Choice.Profile.Name);
             AttachProbeDiagnostics(destinationProbeService, destination.Choice.Profile.Name);
-            var sourceProbe = sourceProbeService.ProbeRemoteRoutesAsync(
-                new RsyncRemoteRouteProbeRequest
-                {
-                    FirstHopProfile = source.Choice.Profile,
-                    FirstHopRoute = sourceRoute,
-                    FirstHopAuthentication = sourceAuthentication,
-                    TargetProfile = destination.Choice.Profile,
-                    TargetRoute = destinationRoute,
-                    TargetAuthentication = destinationAuthentication,
-                    Candidates = destinationCandidates,
-                },
-                token);
-            var destinationProbe = destinationProbeService.ProbeRemoteRoutesAsync(
-                new RsyncRemoteRouteProbeRequest
-                {
-                    FirstHopProfile = destination.Choice.Profile,
-                    FirstHopRoute = destinationRoute,
-                    FirstHopAuthentication = destinationAuthentication,
-                    TargetProfile = source.Choice.Profile,
-                    TargetRoute = sourceRoute,
-                    TargetAuthentication = sourceAuthentication,
-                    Candidates = sourceCandidates,
-                },
-                token);
+            var sourceProbe = CaptureProbeAsync(
+                sourceProbeService.ProbeRemoteRoutesAsync(
+                    new RsyncRemoteRouteProbeRequest
+                    {
+                        FirstHopProfile = source.Choice.Profile,
+                        FirstHopRoute = sourceRoute,
+                        FirstHopAuthentication = sourceAuthentication,
+                        TargetProfile = destination.Choice.Profile,
+                        TargetRoute = destinationRoute,
+                        TargetAuthentication = destinationAuthentication,
+                        Candidates = destinationCandidates,
+                    },
+                    token),
+                source.Choice.Profile.Name,
+                destination.Choice.Profile.Name);
+            var destinationProbe = CaptureProbeAsync(
+                destinationProbeService.ProbeRemoteRoutesAsync(
+                    new RsyncRemoteRouteProbeRequest
+                    {
+                        FirstHopProfile = destination.Choice.Profile,
+                        FirstHopRoute = destinationRoute,
+                        FirstHopAuthentication = destinationAuthentication,
+                        TargetProfile = source.Choice.Profile,
+                        TargetRoute = sourceRoute,
+                        TargetAuthentication = sourceAuthentication,
+                        Candidates = sourceCandidates,
+                    },
+                    token),
+                destination.Choice.Profile.Name,
+                source.Choice.Profile.Name);
             await Task.WhenAll(sourceProbe, destinationProbe);
+            var sourceProbeResult = await sourceProbe;
+            var destinationProbeResult = await destinationProbe;
             var rows = BuildRouteRows(
                     source.Choice.Profile,
                     destination.Choice.Profile,
-                    await sourceProbe,
+                    sourceProbeResult.Results,
                     RsyncRemoteTransferExecutionSide.Source)
                 .Concat(BuildRouteRows(
                     destination.Choice.Profile,
                     source.Choice.Profile,
-                    await destinationProbe,
+                    destinationProbeResult.Results,
                     RsyncRemoteTransferExecutionSide.Destination))
                 .OrderByDescending(row => row.Success)
                 .ThenBy(row => row.LatencyMilliseconds)
@@ -401,9 +417,17 @@ public partial class MachineTransferWindow : Window
                     $"fingerprint={row.Fingerprint}; details={row.Message}");
             }
             var succeeded = rows.Count(row => row.Success);
+            var probeErrors = new[] { sourceProbeResult.Error, destinationProbeResult.Error }
+                .Where(error => !string.IsNullOrWhiteSpace(error))
+                .ToArray();
             RouteProbeStatusText.Text = succeeded > 0
                 ? LocalizationService.Format("RouteProbeCompleted", succeeded, rows.Length)
-                : LocalizationService.Format("RouteProbeNoSuccess", rows.Length);
+                : rows.Length > 0
+                    ? LocalizationService.Format("RouteProbeNoSuccess", rows.Length)
+                    : LocalizationService.Format("RouteProbeFailed", string.Join("; ", probeErrors));
+            RouteProbeStatusText.ToolTip = probeErrors.Length > 0
+                ? string.Join(Environment.NewLine, probeErrors)
+                : null;
         }
         catch (OperationCanceledException)
         {
@@ -425,12 +449,12 @@ public partial class MachineTransferWindow : Window
 
     internal static IReadOnlyList<RemoteNetworkAddressCandidate> BuildRouteCandidates(
         ConnectionProfile profile,
-        RemoteNetworkInventory inventory)
+        RemoteNetworkInventory? inventory)
     {
-        var candidates = inventory.Addresses.Select(address => new RemoteNetworkAddressCandidate
+        var candidates = (inventory?.Addresses ?? []).Select(address => new RemoteNetworkAddressCandidate
             {
                 Host = address.Address,
-                Port = inventory.SshLocalPort,
+                Port = inventory!.SshLocalPort,
                 InterfaceName = address.InterfaceName,
             })
             .Append(new RemoteNetworkAddressCandidate
@@ -462,6 +486,46 @@ public partial class MachineTransferWindow : Window
             .ThenBy(candidate => candidate.Host, StringComparer.OrdinalIgnoreCase)
             .Take(32)
             .ToArray();
+    }
+
+    private async Task<RemoteNetworkInventory?> CaptureInventoryAsync(
+        Task<RemoteNetworkInventory> discovery,
+        string profileName)
+    {
+        try
+        {
+            return await discovery;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            AppendDiagnostic("inventory-error", $"session={profileName}; details={ex.Message}");
+            return null;
+        }
+    }
+
+    private async Task<RouteProbeAttempt> CaptureProbeAsync(
+        Task<IReadOnlyList<RsyncRemoteRouteProbeResult>> probe,
+        string firstHopName,
+        string targetName)
+    {
+        try
+        {
+            return new RouteProbeAttempt(await probe, null);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            var message = $"execute={firstHopName}; target={targetName}; details={ex.Message}";
+            AppendDiagnostic("route-direction-error", message);
+            return new RouteProbeAttempt([], message);
+        }
     }
 
     private static IEnumerable<RouteProbeChoice> BuildRouteRows(
@@ -1301,6 +1365,10 @@ public partial class MachineTransferWindow : Window
         public string Status => LocalizationService.Get(Success ? "RouteAvailable" : "RouteUnavailable");
         public string LatencyDisplay => LatencyMilliseconds > 0 ? $"{LatencyMilliseconds} ms" : "—";
     }
+
+    private sealed record RouteProbeAttempt(
+        IReadOnlyList<RsyncRemoteRouteProbeResult> Results,
+        string? Error);
 
     private sealed record TransferOptionSnapshot(
         bool Archive,
