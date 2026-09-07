@@ -682,7 +682,7 @@ public partial class MainWindow : Window
     {
         var operation = state.MonitoringOperation;
         state.MonitoringOperation = null;
-        operation?.Cancel();
+        if (operation is not null) _ = operation.CancelAsync();
     }
 
     private async Task RunMonitoringLoopAsync(TerminalViewState state, CancellationTokenSource operation)
@@ -693,12 +693,13 @@ public partial class MainWindow : Window
             {
                 try
                 {
-                    await using var monitor = await RemoteMonitoringService.ConnectAsync(
+                    var authentication = state.Surface.Authentication;
+                    await using var monitor = await Task.Run(() => RemoteMonitoringService.ConnectAsync(
                         state.Profile,
-                        state.Surface.Authentication,
+                        authentication,
                         _hostKeyVerifier.Verify,
                         state.Route,
-                        operation.Token);
+                        operation.Token));
                     while (!operation.IsCancellationRequested)
                     {
                         using var sampleTimeout = CancellationTokenSource.CreateLinkedTokenSource(operation.Token);
@@ -706,7 +707,7 @@ public partial class MainWindow : Window
                         RemoteMonitoringSnapshot snapshot;
                         try
                         {
-                            snapshot = await monitor.SampleAsync(sampleTimeout.Token);
+                            snapshot = await Task.Run(() => monitor.SampleAsync(sampleTimeout.Token));
                         }
                         catch (OperationCanceledException) when (!operation.IsCancellationRequested)
                         {

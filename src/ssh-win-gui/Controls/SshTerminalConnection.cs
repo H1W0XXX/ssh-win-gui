@@ -45,6 +45,8 @@ public sealed class SshTerminalConnection : ITerminalConnection, IDisposable
     private int _started;
     private int _closed;
     private int _inputOverflowNotified;
+    private int _resizePending;
+    private int _resizeRunning;
 
     public SshTerminalConnection(
         ConnectionProfile profile,
@@ -68,12 +70,12 @@ public sealed class SshTerminalConnection : ITerminalConnection, IDisposable
 
     public void Start()
     {
-        if (Interlocked.Exchange(ref _started, 1) != 0)
+        if (Volatile.Read(ref _closed) != 0 || Interlocked.Exchange(ref _started, 1) != 0)
         {
             return;
         }
 
-        _runTask = RunAsync();
+        _runTask = Task.Run(RunAsync);
     }
 
     public void WriteInput(string data)
@@ -112,20 +114,54 @@ public sealed class SshTerminalConnection : ITerminalConnection, IDisposable
 
         _rows = rows;
         _columns = columns;
+        Interlocked.Exchange(ref _resizePending, 1);
+        QueueResize();
+    }
+
+    private void QueueResize()
+    {
+        if (Volatile.Read(ref _closed) != 0 || Interlocked.CompareExchange(ref _resizeRunning, 1, 0) != 0)
+            return;
+        _ = Task.Run(() =>
+        {
+            try
+            {
+                while (Volatile.Read(ref _closed) == 0 && Interlocked.Exchange(ref _resizePending, 0) != 0)
+                    SendResize();
+            }
+            catch (Exception ex) { DiagnosticLog.Write("TerminalResize", ex); }
+            finally
+            {
+                Interlocked.Exchange(ref _resizeRunning, 0);
+                if (Volatile.Read(ref _resizePending) != 0) QueueResize();
+            }
+        });
+    }
+
+    private void SendResize()
+    {
+        var rows = _rows;
+        var columns = _columns;
+        ShellStream? shell;
+        RemoteProcess? jumpProcess;
         lock (_resourceGate)
         {
-            if (_shell is { CanWrite: true })
+            shell = _shell;
+            jumpProcess = _jumpProcess;
+        }
+        {
+            if (shell is { CanWrite: true })
             {
                 try
                 {
-                    _shell.ChangeWindowSize(columns, rows, 0, 0);
+                    shell.ChangeWindowSize(columns, rows, 0, 0);
                 }
                 catch (ObjectDisposedException)
                 {
                     // The remote shell closed during a resize notification.
                 }
             }
-            else if (_jumpProcess is { HasTerminal: true } process)
+            else if (jumpProcess is { HasTerminal: true } process)
             {
                 try { process.SetTerminalSize(checked((int)columns), checked((int)rows)); }
                 catch (ObjectDisposedException) { }
@@ -141,31 +177,36 @@ public sealed class SshTerminalConnection : ITerminalConnection, IDisposable
         }
 
         _input.Writer.TryComplete();
-        _lifetime.Cancel();
+        // Cancellation callbacks and SSH disposal may perform blocking network IO.
+        // Never execute either on the WPF thread.
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await _lifetime.CancelAsync().ConfigureAwait(false);
+                ReleaseResources();
+                if (_runTask is { } runTask) await runTask.ConfigureAwait(false);
+            }
+            catch (Exception ex) { DiagnosticLog.Write("TerminalClose", ex); }
+            finally { _lifetime.Dispose(); }
+        });
+    }
+
+    private void ReleaseResources()
+    {
+        IDisposable?[] resources;
         lock (_resourceGate)
         {
-            _shell?.Dispose();
+            resources = [_shell, _jumpProcess, _jumpClient, _session];
             _shell = null;
-            _jumpProcess?.Dispose();
             _jumpProcess = null;
-            _jumpClient?.Dispose();
             _jumpClient = null;
-            _session?.Dispose();
             _session = null;
         }
-
-        var runTask = _runTask;
-        if (runTask is null || runTask.IsCompleted)
+        foreach (var resource in resources)
         {
-            _lifetime.Dispose();
-        }
-        else
-        {
-            _ = runTask.ContinueWith(
-                _ => _lifetime.Dispose(),
-                CancellationToken.None,
-                TaskContinuationOptions.ExecuteSynchronously,
-                TaskScheduler.Default);
+            try { resource?.Dispose(); }
+            catch (Exception ex) { DiagnosticLog.Write("TerminalCleanup", ex); }
         }
     }
 
@@ -211,15 +252,13 @@ public sealed class SshTerminalConnection : ITerminalConnection, IDisposable
             await _rendererAttached.Task.WaitAsync(_lifetime.Token).ConfigureAwait(false);
             var reader = ReadLoopAsync(shell, _lifetime.Token);
             var writer = WriteLoopAsync(shell, _lifetime.Token);
-            await reader.ConfigureAwait(false);
-            _input.Writer.TryComplete();
-            await writer.ConfigureAwait(false);
+            await CompleteIoAsync(reader, writer).ConfigureAwait(false);
             if (Volatile.Read(ref _closed) == 0)
             {
                 PublishState(TerminalHostState.Exited, _closedMessage);
             }
         }
-        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
+        catch (OperationCanceledException) when (Volatile.Read(ref _closed) != 0)
         {
             // Closing a tab cancels connection, read and write operations.
         }
@@ -232,17 +271,7 @@ public sealed class SshTerminalConnection : ITerminalConnection, IDisposable
         }
         finally
         {
-            lock (_resourceGate)
-            {
-                _shell?.Dispose();
-                _shell = null;
-                _jumpProcess?.Dispose();
-                _jumpProcess = null;
-                _jumpClient?.Dispose();
-                _jumpClient = null;
-                _session?.Dispose();
-                _session = null;
-            }
+            ReleaseResources();
         }
     }
 
@@ -263,11 +292,23 @@ public sealed class SshTerminalConnection : ITerminalConnection, IDisposable
         await _rendererAttached.Task.WaitAsync(_lifetime.Token).ConfigureAwait(false);
         var reader = ReadJumpLoopAsync(process, _lifetime.Token);
         var writer = WriteJumpLoopAsync(process, _lifetime.Token);
-        await reader.ConfigureAwait(false);
-        _input.Writer.TryComplete();
-        await writer.ConfigureAwait(false);
+        await CompleteIoAsync(reader, writer).ConfigureAwait(false);
         if (Volatile.Read(ref _closed) == 0)
             PublishState(TerminalHostState.Exited, _closedMessage);
+    }
+
+    private async Task CompleteIoAsync(Task reader, Task writer)
+    {
+        var first = await Task.WhenAny(reader, writer).ConfigureAwait(false);
+        try { await first.ConfigureAwait(false); }
+        finally
+        {
+            _input.Writer.TryComplete();
+            await _lifetime.CancelAsync().ConfigureAwait(false);
+            ReleaseResources();
+            try { await Task.WhenAll(reader, writer).ConfigureAwait(false); }
+            catch (OperationCanceledException) when (_lifetime.IsCancellationRequested) { }
+        }
     }
 
     private async Task ReadJumpLoopAsync(RemoteProcess process, CancellationToken cancellationToken)

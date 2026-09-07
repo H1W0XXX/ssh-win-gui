@@ -329,10 +329,9 @@ public sealed class RemoteMonitoringService : IAsyncDisposable
     private static string QuoteForPosixShell(string value) =>
         "'" + value.Replace("'", "'\"'\"'", StringComparison.Ordinal) + "'";
 
-    public ValueTask DisposeAsync()
+    public ValueTask DisposeAsync() => new(Task.Run(() =>
     {
-        _sshNetSession?.Dispose();
-        _jumpSession?.Dispose();
-        return ValueTask.CompletedTask;
-    }
+        try { _sshNetSession?.Dispose(); }
+        finally { _jumpSession?.Dispose(); }
+    }));
 }

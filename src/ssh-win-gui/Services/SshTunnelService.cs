@@ -286,8 +286,15 @@ public sealed class SshTunnelSession : INotifyPropertyChanged, IDisposable
     public void Stop()
     {
         if (Interlocked.Exchange(ref _stopRequested, 1) != 0) return;
-        _lifetime.Cancel();
-        ReleaseResources();
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await _lifetime.CancelAsync().ConfigureAwait(false);
+                ReleaseResources();
+            }
+            catch (Exception ex) { DiagnosticLog.Write("TunnelStop", ex); }
+        });
         IsRunning = false;
         Status = LocalizationService.Get("TunnelStopped");
         AppendLog($"[{DateTimeOffset.Now:HH:mm:ss}] Stopped.");
@@ -295,24 +302,26 @@ public sealed class SshTunnelSession : INotifyPropertyChanged, IDisposable
 
     private void ReleaseResources()
     {
-        try { _sshNetForward?.Stop(); } catch { }
-        try { _remoteListener?.Stop(); } catch { }
-        _sshNetForward?.Dispose();
-        _sshNetForward = null;
-        _sshNetSession?.Dispose();
-        _sshNetSession = null;
-        _remoteListener?.Dispose();
-        _remoteListener = null;
-        _tmdsForward?.Dispose();
-        _tmdsForward = null;
-        _tmdsClient?.Dispose();
-        _tmdsClient = null;
+        IDisposable?[] resources =
+        [
+            Interlocked.Exchange(ref _sshNetForward, null),
+            Interlocked.Exchange(ref _sshNetSession, null),
+            Interlocked.Exchange(ref _remoteListener, null),
+            Interlocked.Exchange(ref _tmdsForward, null),
+            Interlocked.Exchange(ref _tmdsClient, null),
+        ];
+        foreach (var resource in resources)
+        {
+            try { resource?.Dispose(); }
+            catch (Exception ex) { DiagnosticLog.Write("TunnelCleanup", ex); }
+        }
     }
 
     public void Dispose()
     {
         Stop();
-        _lifetime.Dispose();
+        // In-flight connection/forwarding tasks still read this source. Let it
+        // be collected with the session once those tasks have released it.
     }
 
     private void AppendLog(string message)
