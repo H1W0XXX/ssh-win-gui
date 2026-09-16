@@ -101,7 +101,7 @@ func runRouteProbe(ctx context.Context, req RouteProbeRequest, reporter *jobRepo
 			case <-probeContext.Done():
 				return
 			}
-			result := probeRouteCandidate(probeContext, firstHop, req.Target, candidate)
+			result := probeRouteCandidate(probeContext, firstHop, req.Target, candidate, req.Docker)
 			reporter.probe(result)
 		}()
 	}
@@ -117,6 +117,7 @@ func probeRouteCandidate(
 	firstHop interface{ NewSession() (*ssh.Session, error) },
 	target RemoteEndpoint,
 	candidate RouteCandidate,
+	docker ...bool,
 ) RouteProbeResult {
 	started := time.Now()
 	result := RouteProbeResult{
@@ -143,6 +144,11 @@ func probeRouteCandidate(
 	}
 	remoteCheck := "printf '__SSH_WIN_GUI_ROUTE_OK__\\n'; " +
 		"if command -v rsync >/dev/null 2>&1; then printf '__RSYNC_OK__\\n'; else printf '__RSYNC_MISSING__\\n'; exit 74; fi"
+	readyMarker := "__RSYNC_OK__"
+	if len(docker) > 0 && docker[0] {
+		readyMarker = "__DOCKER_OK__"
+		remoteCheck = dockerAccessScript + "printf '__SSH_WIN_GUI_ROUTE_OK__\\n__DOCKER_OK__\\n'"
+	}
 	destination := formatSshDestination(target)
 	command := buildInnerFingerprintCommand(target) + "\n" +
 		innerSSH + " " + shellQuote(destination) + " " + shellQuote(remoteCheck)
@@ -166,9 +172,12 @@ func probeRouteCandidate(
 	result.LatencyMilliseconds = time.Since(started).Milliseconds()
 	output := stdout.String()
 	result.Fingerprint = parseProbeFingerprint(output)
-	if err == nil && strings.Contains(output, "__SSH_WIN_GUI_ROUTE_OK__") && strings.Contains(output, "__RSYNC_OK__") {
+	if err == nil && strings.Contains(output, "__SSH_WIN_GUI_ROUTE_OK__") && strings.Contains(output, readyMarker) {
 		result.Success = true
 		result.Message = "SSH and rsync are ready"
+		if len(docker) > 0 && docker[0] {
+			result.Message = "SSH and Docker are ready"
+		}
 		return result
 	}
 	message := strings.TrimSpace(stderr.String())

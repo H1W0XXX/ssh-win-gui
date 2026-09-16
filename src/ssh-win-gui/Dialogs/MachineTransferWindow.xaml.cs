@@ -132,6 +132,7 @@ public partial class MachineTransferWindow : Window
 
     private async Task RefreshEndpointAsync(EndpointState endpoint)
     {
+        if (IsDockerMode) { await RefreshDockerEndpointAsync(endpoint); return; }
         endpoint.Choice = endpoint.HostComboBox.SelectedItem as EndpointChoice;
         if (endpoint.Choice is null)
         {
@@ -310,6 +311,7 @@ public partial class MachineTransferWindow : Window
         _routeProbeCancellation?.Dispose();
         _routeProbeCancellation = new CancellationTokenSource();
         var token = _routeProbeCancellation.Token;
+        var dockerMode = IsDockerMode;
         _selectedRoute = null;
         _routeChoices.Clear();
         RouteResultsList.SelectedItem = null;
@@ -340,6 +342,7 @@ public partial class MachineTransferWindow : Window
             var sourceInventoryResult = CaptureInventoryAsync(sourceInventoryTask, source.Choice.Profile.Name);
             var destinationInventoryResult = CaptureInventoryAsync(destinationInventoryTask, destination.Choice.Profile.Name);
             await Task.WhenAll(sourceInventoryResult, destinationInventoryResult);
+            token.ThrowIfCancellationRequested();
             var sourceInventory = await sourceInventoryResult;
             var destinationInventory = await destinationInventoryResult;
             var sourceCandidates = BuildRouteCandidates(source.Choice.Profile, sourceInventory);
@@ -364,6 +367,7 @@ public partial class MachineTransferWindow : Window
                 sourceProbeService.ProbeRemoteRoutesAsync(
                     new RsyncRemoteRouteProbeRequest
                     {
+                        Docker = dockerMode,
                         FirstHopProfile = source.Choice.Profile,
                         FirstHopRoute = sourceRoute,
                         FirstHopAuthentication = sourceAuthentication,
@@ -379,6 +383,7 @@ public partial class MachineTransferWindow : Window
                 destinationProbeService.ProbeRemoteRoutesAsync(
                     new RsyncRemoteRouteProbeRequest
                     {
+                        Docker = dockerMode,
                         FirstHopProfile = destination.Choice.Profile,
                         FirstHopRoute = destinationRoute,
                         FirstHopAuthentication = destinationAuthentication,
@@ -391,6 +396,7 @@ public partial class MachineTransferWindow : Window
                 destination.Choice.Profile.Name,
                 source.Choice.Profile.Name);
             await Task.WhenAll(sourceProbe, destinationProbe);
+            token.ThrowIfCancellationRequested();
             var sourceProbeResult = await sourceProbe;
             var destinationProbeResult = await destinationProbe;
             var rows = BuildRouteRows(
@@ -417,6 +423,8 @@ public partial class MachineTransferWindow : Window
                     $"fingerprint={row.Fingerprint}; details={row.Message}");
             }
             var succeeded = rows.Count(row => row.Success);
+            if (IsDockerMode && rows.FirstOrDefault(row => row.Message.Contains("SUDO_REQUIRED:", StringComparison.Ordinal)) is { } sudoRow)
+                ShowError(LocalizationService.Format("DockerSudoRequired", sudoRow.TargetSession));
             var probeErrors = new[] { sourceProbeResult.Error, destinationProbeResult.Error }
                 .Where(error => !string.IsNullOrWhiteSpace(error))
                 .ToArray();
@@ -662,8 +670,9 @@ public partial class MachineTransferWindow : Window
         }
     }
 
-    private void StartTransfer_OnClick(object sender, RoutedEventArgs e)
+    private async void StartTransfer_OnClick(object sender, RoutedEventArgs e)
     {
+        if (IsDockerMode) { await StartDockerTransferAsync(); return; }
         var specification = BuildSpecification(showErrors: true);
         if (specification is null)
         {
@@ -1088,6 +1097,7 @@ public partial class MachineTransferWindow : Window
 
     private void MachineTransferWindow_OnClosing(object? sender, CancelEventArgs e)
     {
+        if (_dockerPreparing) { e.Cancel = true; return; }
         var running = _jobs.Where(job => job.IsRunning).ToArray();
         if (running.Length > 0)
         {
@@ -1338,6 +1348,7 @@ public partial class MachineTransferWindow : Window
         public EndpointChoice? Choice { get; set; }
         public CancellationTokenSource? LoadCancellation { get; set; }
         public int LoadGeneration { get; set; }
+        public IReadOnlyList<DockerImage> DockerImages { get; set; } = [];
     }
 
     private sealed record EndpointChoice(bool IsLocal, ConnectionProfile? Profile, string DisplayName)
@@ -1394,8 +1405,10 @@ public partial class MachineTransferWindow : Window
         long Size,
         DateTimeOffset Modified)
     {
-        public string Glyph => IsDirectory ? "📁" : "📄";
-        public string SizeDisplay => IsDirectory ? string.Empty : RemoteFileEntrySize(Size);
+        public DockerImage? Image { get; init; }
+        public string ImageId => Image?.Id ?? string.Empty;
+        public string Glyph => Image is not null ? "▣" : IsDirectory ? "📁" : "📄";
+        public string SizeDisplay => Image?.Size ?? (IsDirectory ? string.Empty : RemoteFileEntrySize(Size));
         public string ModifiedDisplay => IsParent || Modified == DateTimeOffset.MinValue
             ? string.Empty
             : Modified.ToLocalTime().ToString("yyyy-MM-dd HH:mm", CultureInfo.CurrentCulture);
@@ -1511,7 +1524,7 @@ public partial class MachineTransferWindow : Window
                 : transferred;
             Speed = bytesPerSecond is > 0
                 ? FormatTransferSize(bytesPerSecond.Value) + "/s"
-                : string.Empty;
+                : transferEvent.Phase?.StartsWith("docker_", StringComparison.Ordinal) == true ? "0 B/s" : string.Empty;
         }
 
         private static string FormatTransferSize(long value)

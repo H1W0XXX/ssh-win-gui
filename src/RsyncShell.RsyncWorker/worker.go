@@ -110,8 +110,10 @@ func (w *Worker) handleLine(parent context.Context, line []byte) error {
 	switch msg.Type {
 	case "transfer":
 		return w.startTransfer(parent, msg)
-	case "remote_transfer":
+	case "remote_transfer", "docker_transfer":
 		return w.startRemoteTransfer(parent, msg)
+	case "docker_list":
+		return w.startDockerList(parent, msg)
 	case "probe_routes":
 		return w.startRouteProbe(parent, msg)
 	case "cancel":
@@ -153,6 +155,9 @@ func (w *Worker) startTransfer(parent context.Context, msg InboundMessage) error
 }
 
 func (w *Worker) startRemoteTransfer(parent context.Context, msg InboundMessage) error {
+	if msg.Type == "docker_transfer" && (msg.RemoteTransfer == nil || msg.RemoteTransfer.Docker == nil) {
+		return w.out.emit(OutboundMessage{Type: "error", RequestID: msg.RequestID, Error: &WorkerError{Code: "invalid_request", Message: "Docker transfer options are required"}})
+	}
 	if msg.RequestID == "" {
 		return w.out.emit(OutboundMessage{
 			Type:  "error",

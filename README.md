@@ -163,3 +163,9 @@ under `%LOCALAPPDATA%\RsyncShell\logs` without suppressing the original crash.
 - `CI.Microsoft.Terminal.Wpf` is a signed development-time repack of Microsoft's
   MIT-licensed source. Before a release, pin an official Windows Terminal commit
   and reproduce the native DLL build; see [architecture](docs/architecture.md).
+
+## Remote Docker image transfer
+
+The machine transfer window also supports Docker images, optional zstd compression,
+Kubernetes image filtering, tag collision confirmation, and non-interactive sudo.
+See [Docker image transfer](docs/docker-image-transfer.md) for usage and limits.

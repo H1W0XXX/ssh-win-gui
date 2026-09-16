@@ -35,6 +35,7 @@ public sealed record RsyncTransferRequest
 
 public sealed record RsyncRemoteTransferRequest
 {
+    public DockerTransferOptions? Docker { get; init; }
     public required ConnectionProfile SourceProfile { get; init; }
     public IReadOnlyList<ConnectionProfile> SourceRoute { get; init; } = [];
     public required SshAuthenticationOptions SourceAuthentication { get; init; }
@@ -71,6 +72,7 @@ public sealed record RemoteNetworkAddressCandidate
 
 public sealed record RsyncRemoteRouteProbeRequest
 {
+    public bool Docker { get; init; }
     public required ConnectionProfile FirstHopProfile { get; init; }
     public IReadOnlyList<ConnectionProfile> FirstHopRoute { get; init; } = [];
     public required SshAuthenticationOptions FirstHopAuthentication { get; init; }

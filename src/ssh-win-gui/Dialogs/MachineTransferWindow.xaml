@@ -18,6 +18,7 @@
 
         <Style x:Key="EndpointListItem" TargetType="ListViewItem" BasedOn="{StaticResource RemoteFileItemStyle}">
             <Setter Property="MinHeight" Value="32" />
+            <Setter Property="ToolTip" Value="{Binding Name}" />
         </Style>
 
         <Style x:Key="DirectionChoice" TargetType="RadioButton">
@@ -80,6 +81,11 @@
             </Grid.ColumnDefinitions>
 
             <DockPanel Grid.Row="0" Grid.ColumnSpan="5" LastChildFill="True">
+                <ComboBox x:Name="TransferKindComboBox" DockPanel.Dock="Right" Width="175" Height="34"
+                          SelectedIndex="0" SelectionChanged="TransferKind_OnChanged" Margin="12,0,0,0">
+                    <ComboBoxItem Content="{DynamicResource FileTransferMode}" />
+                    <ComboBoxItem Content="{DynamicResource DockerTransferMode}" />
+                </ComboBox>
                 <Border DockPanel.Dock="Left"
                         Width="38"
                         Height="38"
@@ -95,7 +101,7 @@
                 </Border>
                 <StackPanel>
                     <TextBlock Text="{DynamicResource MachineTransferTitle}" Style="{StaticResource PageTitleText}" />
-                    <TextBlock Text="{DynamicResource TipMachineTransfer}"
+                    <TextBlock x:Name="TransferSubtitle" Text="{DynamicResource TipMachineTransfer}"
                                Foreground="{StaticResource MutedTextBrush}"
                                Margin="0,3,0,0" />
                 </StackPanel>
@@ -144,7 +150,7 @@
                               SelectionChanged="EndpointHost_OnSelectionChanged"
                               Tag="A" />
 
-                    <Grid Grid.Row="4">
+                    <Grid x:Name="APathPanel" Grid.Row="4">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="6" />
@@ -270,7 +276,7 @@
                                     Margin="0,8"
                                     HorizontalContentAlignment="Center"
                                     Click="StartTransfer_OnClick" />
-                            <Button Content="{DynamicResource PreviewCommand}"
+                            <Button x:Name="PreviewCommandButton" Content="{DynamicResource PreviewCommand}"
                                     Style="{StaticResource SecondaryActionButton}"
                                     Width="170"
                                     Height="38"
@@ -287,6 +293,15 @@
                                   VerticalScrollBarVisibility="Auto"
                                   HorizontalScrollBarVisibility="Disabled">
                         <StackPanel>
+                        <StackPanel x:Name="DockerOptionsPanel" Visibility="Collapsed">
+                            <TextBlock Text="{DynamicResource DockerTransferMode}" Style="{StaticResource SectionTitleText}" />
+                            <CheckBox x:Name="ZstdCheckBox" Content="zstd" IsChecked="True" Margin="0,10,0,6" />
+                            <CheckBox x:Name="HideK8sCheckBox" Content="{DynamicResource HideK8sImages}" IsChecked="True" Margin="0,0,0,10" Checked="DockerFilter_OnChanged" Unchecked="DockerFilter_OnChanged" />
+                            <TextBlock Text="{DynamicResource DockerFilter}" Style="{StaticResource FieldLabelText}" />
+                            <TextBox x:Name="DockerFilterTextBox" TextChanged="DockerFilter_OnChanged" Margin="0,0,0,10" />
+                            <TextBlock Text="{DynamicResource DockerTransferHint}" TextWrapping="Wrap" Foreground="{StaticResource MutedTextBrush}" />
+                        </StackPanel>
+                        <StackPanel x:Name="FileOptionsPanel">
                         <TextBlock Text="{DynamicResource RsyncOptions}" Style="{StaticResource SectionTitleText}" />
                         <CheckBox x:Name="ArchiveCheckBox" IsChecked="True" Margin="0,10,0,3">
                             <TextBlock Text="{DynamicResource ArchiveOption}" TextWrapping="Wrap" />
@@ -318,6 +333,7 @@
                                    Foreground="{StaticResource MutedTextBrush}"
                                    TextWrapping="Wrap"
                                    Margin="1,6,1,0" />
+                        </StackPanel>
                         </StackPanel>
                     </ScrollViewer>
                 </Grid>
@@ -366,7 +382,7 @@
                               SelectionChanged="EndpointHost_OnSelectionChanged"
                               Tag="B" />
 
-                    <Grid Grid.Row="4">
+                    <Grid x:Name="BPathPanel" Grid.Row="4">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="6" />

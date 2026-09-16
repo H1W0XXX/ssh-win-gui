@@ -13,6 +13,11 @@ import (
 )
 
 func validateRemoteTransferRequest(req *RemoteTransferRequest) error {
+	if req.Docker != nil {
+		if err := validateDockerTransfer(req.Docker); err != nil {
+			return err
+		}
+	}
 	if strings.TrimSpace(req.SourcePath) == "" || strings.TrimSpace(req.DestinationPath) == "" {
 		return errorCode("invalid_request", errors.New("sourcePath and destinationPath are required"))
 	}
@@ -119,6 +124,37 @@ func runRemoteTransfer(ctx context.Context, req RemoteTransferRequest, reporter 
 	innerSSH, err := buildInnerSSHCommand(innerEndpoint)
 	if err != nil {
 		return nil, err
+	}
+	if req.Docker != nil {
+		var dockerBytes int64
+		// One tag per SSH command keeps quoting / argv size bounded for large
+		// selections. Reuse the authenticated connection and forwarded agent.
+		for index, image := range req.Docker.Images {
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
+			current := session
+			if index > 0 {
+				current, err = execClient.NewSession()
+				if err != nil {
+					return nil, err
+				}
+				if err = agent.RequestAgentForwarding(current); err != nil {
+					current.Close()
+					return nil, err
+				}
+			}
+			one := req
+			one.Docker = &DockerTransferOptions{Images: []DockerImageSelection{image}, Zstd: req.Docker.Zstd}
+			reporter.log("info", fmt.Sprintf("Image %d/%d: %s", index+1, len(req.Docker.Images), image.Reference))
+			stats, transferErr := runDockerStream(ctx, current, one, innerEndpoint, innerSSH, reporter, dockerBytes)
+			_ = current.Close()
+			if transferErr != nil {
+				return nil, transferErr
+			}
+			dockerBytes += stats.ProtocolWritten
+		}
+		return &TransferStat{ProtocolWritten: dockerBytes}, nil
 	}
 	args := buildRemoteRsyncArgs(req.Options)
 	if !hasRsyncProgressOption(args) {

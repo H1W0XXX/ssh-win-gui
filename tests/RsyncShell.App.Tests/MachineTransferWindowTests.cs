@@ -6,6 +6,23 @@ namespace RsyncShell.App.Tests;
 public sealed class MachineTransferWindowTests
 {
     [Fact]
+    public void DockerConflictsUseExactRepositoryAndTagIncludingHiddenImages()
+    {
+        var image = new DockerImage { Repository = "registry:5000/app", Tag = "stable", Id = "source-id" };
+        var target = image with { Id = "old-id", IsKubernetes = true };
+        var selections = MachineTransferWindow.BuildDockerSelections([image], [image], [target, image with { Tag = "dev" }]);
+        Assert.Equal("old-id", Assert.Single(selections).DestinationId);
+        Assert.Empty(Assert.Single(MachineTransferWindow.BuildDockerSelections([image], [image], [target with { Tag = "dev" }])).DestinationId);
+    }
+
+    [Fact]
+    public void DockerSelectionsRejectStaleSourceImageInsteadOfCopyingNewContent()
+    {
+        var image = new DockerImage { Repository = "app", Tag = "latest", Id = "old" };
+        Assert.Throws<InvalidOperationException>(() => MachineTransferWindow.BuildDockerSelections([image], [image with { Id = "new" }], []));
+    }
+
+    [Fact]
     public void ExtraArgumentsPreserveQuotedValuesWithoutShellText()
     {
         var success = MachineTransferWindow.TrySplitArguments(

@@ -324,4 +324,25 @@
     <sys:String x:Key="PreviewRunsLocally">在 Windows 本机执行：</sys:String>
     <sys:String x:Key="PreviewRunsOn">在“{0}”执行，私钥由 agent 临时转发：</sys:String>
     <sys:String x:Key="CloseCancelsTransfers">仍有 {0} 个机器传输任务在运行，是否取消任务？&#10;&#10;是：取消任务并关闭窗口&#10;否：隐藏窗口，任务继续在后台运行&#10;取消：返回传输窗口</sys:String>
+    <sys:String x:Key="FileTransferMode">文件传输</sys:String>
+    <sys:String x:Key="DockerTransferMode">Docker 镜像传输</sys:String>
+    <sys:String x:Key="HideK8sImages">隐藏 Kubernetes 镜像</sys:String>
+    <sys:String x:Key="DockerFilter">搜索镜像名称 / tag</sys:String>
+    <sys:String x:Key="DockerTransferHint">选择源机器中的镜像，可多选。先探测并选择可用路线，再开始传输。zstd 需要两端安装。K8s 过滤按常见仓库和 Kubernetes 容器标签识别，可取消隐藏查看全部。</sys:String>
+    <sys:String x:Key="DockerImageCount">显示 {0} / {1} 个镜像 tag</sys:String>
+    <sys:String x:Key="DockerLoading">正在读取 Docker 镜像…</sys:String>
+    <sys:String x:Key="DockerSourceChanged">源镜像 {0} 已变化，请刷新后重新选择。</sys:String>
+    <sys:String x:Key="DockerSameHost">请选择不同的源机器和目标机器。</sys:String>
+    <sys:String x:Key="DockerSelectImages">请选择 1–200 个源镜像 tag。</sys:String>
+    <sys:String x:Key="DockerWaitJobs">请等待当前传输完成后再开始镜像传输，避免同一 tag 并发导入。</sys:String>
+    <sys:String x:Key="DockerCollision">目标已有以下同名同 tag 镜像：&#10;&#10;{0}&#10;&#10;= ID 表示内容相同，≠ ID 表示导入将重新指向源镜像。是否继续？</sys:String>
+    <sys:String x:Key="DockerSudoRequired">机器 {0} 的 Docker 操作需要 sudo 权限，当前无法免密执行。&#10;&#10;请先为 SSH 登录用户配置 Docker 命令的免密 sudo（NOPASSWD），然后刷新重试。此处不会请求或发送 sudo 密码。</sys:String>
+    <sys:String x:Key="DockerRunning">进度显示累计镜像流字节数及实时速度；启用 zstd 时统计压缩后的数据。不以镜像大小估算百分比，传输结束后继续等待导入和 ID 校验。</sys:String>
+    <sys:String x:Key="DockerVerified">传输完成，目标镜像 tag 和 ID 已验证。</sys:String>
+    <sys:String x:Key="DockerPartial">取消或失败可能留下已导入的镜像层 / tag；不会自动删除镜像，请刷新目标列表确认。</sys:String>
+    <sys:String x:Key="DockerTransferSubtitle">通过已保存的 SSH 路线，在远程机器之间传输 Docker 镜像</sys:String>
+    <sys:String x:Key="DockerPreparing">检查权限</sys:String>
+    <sys:String x:Key="DockerStreaming">传输镜像</sys:String>
+    <sys:String x:Key="DockerImporting">等待导入</sys:String>
+    <sys:String x:Key="DockerVerifying">校验镜像</sys:String>
 </ResourceDictionary>

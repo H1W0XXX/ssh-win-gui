@@ -15,6 +15,7 @@ type InboundMessage struct {
 	Transfer       *TransferRequest       `json:"transfer,omitempty"`
 	RemoteTransfer *RemoteTransferRequest `json:"remoteTransfer,omitempty"`
 	RouteProbe     *RouteProbeRequest     `json:"routeProbe,omitempty"`
+	DockerList     *RemoteEndpoint        `json:"dockerList,omitempty"`
 }
 
 type TransferRequest struct {
@@ -28,20 +29,22 @@ type TransferRequest struct {
 }
 
 type RemoteTransferRequest struct {
-	SourcePath              string          `json:"sourcePath"`
-	DestinationPath         string          `json:"destinationPath"`
-	CopyContents            bool            `json:"copyContents,omitempty"`
-	ExecutionSide           string          `json:"executionSide,omitempty"`
-	Source                  RemoteEndpoint  `json:"source"`
-	Destination             RemoteEndpoint  `json:"destination"`
-	Options                 TransferOptions `json:"options,omitempty"`
-	SourceTransferHost      string          `json:"sourceTransferHost,omitempty"`
-	SourceTransferPort      int             `json:"sourceTransferPort,omitempty"`
-	DestinationTransferHost string          `json:"destinationTransferHost,omitempty"`
-	DestinationTransferPort int             `json:"destinationTransferPort,omitempty"`
+	Docker                  *DockerTransferOptions `json:"docker,omitempty"`
+	SourcePath              string                 `json:"sourcePath"`
+	DestinationPath         string                 `json:"destinationPath"`
+	CopyContents            bool                   `json:"copyContents,omitempty"`
+	ExecutionSide           string                 `json:"executionSide,omitempty"`
+	Source                  RemoteEndpoint         `json:"source"`
+	Destination             RemoteEndpoint         `json:"destination"`
+	Options                 TransferOptions        `json:"options,omitempty"`
+	SourceTransferHost      string                 `json:"sourceTransferHost,omitempty"`
+	SourceTransferPort      int                    `json:"sourceTransferPort,omitempty"`
+	DestinationTransferHost string                 `json:"destinationTransferHost,omitempty"`
+	DestinationTransferPort int                    `json:"destinationTransferPort,omitempty"`
 }
 
 type RouteProbeRequest struct {
+	Docker     bool             `json:"docker,omitempty"`
 	FirstHop   RemoteEndpoint   `json:"firstHop"`
 	Target     RemoteEndpoint   `json:"target"`
 	Candidates []RouteCandidate `json:"candidates"`
@@ -141,6 +144,7 @@ type OutboundMessage struct {
 	Stats           *TransferStat     `json:"stats,omitempty"`
 	Error           *WorkerError      `json:"error,omitempty"`
 	Probe           *RouteProbeResult `json:"probe,omitempty"`
+	Images          []DockerImage     `json:"images,omitempty"`
 	Timestamp       time.Time         `json:"timestamp"`
 }
 
@@ -161,7 +165,7 @@ func helloMessage() OutboundMessage {
 		ProtocolVersion: ipcProtocolVersion,
 		WorkerVersion:   workerVersion,
 		Capabilities: &Capabilities{
-			Operations:        []string{"transfer", "remote_transfer", "probe_routes", "cancel"},
+			Operations:        []string{"transfer", "remote_transfer", "probe_routes", "docker_list", "docker_transfer", "cancel"},
 			Directions:        []string{"upload", "download"},
 			Authentication:    []string{"password", "private_key"},
 			HostKeyModes:      []string{"known_hosts", "sha256", "log_only"},

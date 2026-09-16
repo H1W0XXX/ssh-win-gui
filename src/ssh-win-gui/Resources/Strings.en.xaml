@@ -324,4 +324,25 @@
     <sys:String x:Key="PreviewRunsLocally">Run on Windows:</sys:String>
     <sys:String x:Key="PreviewRunsOn">Run on “{0}” with the key temporarily forwarded by the agent:</sys:String>
     <sys:String x:Key="CloseCancelsTransfers">{0} machine-transfer job(s) are still running. Cancel them?&#10;&#10;Yes: cancel the jobs and close this window&#10;No: hide this window and keep the jobs running&#10;Cancel: return to the transfer window</sys:String>
+    <sys:String x:Key="FileTransferMode">File transfer</sys:String>
+    <sys:String x:Key="DockerTransferMode">Docker image transfer</sys:String>
+    <sys:String x:Key="HideK8sImages">Hide Kubernetes images</sys:String>
+    <sys:String x:Key="DockerFilter">Search repository / tag</sys:String>
+    <sys:String x:Key="DockerTransferHint">Select one or more source images. Discover and select a route before transferring. zstd must be installed on both hosts. K8s filtering uses common repositories and Kubernetes container labels; uncheck to show all.</sys:String>
+    <sys:String x:Key="DockerImageCount">Showing {0} / {1} image tags</sys:String>
+    <sys:String x:Key="DockerLoading">Loading Docker images…</sys:String>
+    <sys:String x:Key="DockerSourceChanged">Source image {0} changed. Refresh and select again.</sys:String>
+    <sys:String x:Key="DockerSameHost">Select different source and destination machines.</sys:String>
+    <sys:String x:Key="DockerSelectImages">Select 1–200 source image tags.</sys:String>
+    <sys:String x:Key="DockerWaitJobs">Wait for active transfers before starting an image transfer to avoid concurrent tag imports.</sys:String>
+    <sys:String x:Key="DockerCollision">These repository:tag references already exist on the destination:&#10;&#10;{0}&#10;&#10;= ID means identical content; ≠ ID means loading will repoint the tag to the source image. Continue?</sys:String>
+    <sys:String x:Key="DockerSudoRequired">Docker on {0} needs sudo and cannot run non-interactively.&#10;&#10;Configure passwordless sudo (NOPASSWD) for the SSH user’s Docker commands, then refresh and retry. No sudo password is requested or transmitted.</sys:String>
+    <sys:String x:Key="DockerRunning">Progress shows cumulative payload bytes and current speed (compressed bytes with zstd). Image size is not used as a percentage estimate. Import and ID verification continue after streaming.</sys:String>
+    <sys:String x:Key="DockerVerified">Transfer complete; destination image tags and IDs verified.</sys:String>
+    <sys:String x:Key="DockerPartial">Cancellation or failure may leave imported layers/tags. Images are not automatically deleted; refresh the destination to check.</sys:String>
+    <sys:String x:Key="DockerTransferSubtitle">Transfer Docker images between remote machines using saved SSH routes</sys:String>
+    <sys:String x:Key="DockerPreparing">Preparing</sys:String>
+    <sys:String x:Key="DockerStreaming">Streaming</sys:String>
+    <sys:String x:Key="DockerImporting">Importing</sys:String>
+    <sys:String x:Key="DockerVerifying">Verifying</sys:String>
 </ResourceDictionary>

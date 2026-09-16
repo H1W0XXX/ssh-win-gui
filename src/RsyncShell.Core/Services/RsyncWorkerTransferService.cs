@@ -68,7 +68,7 @@ public sealed class RsyncWorkerTransferService
         request.SourceAuthentication.Validate();
         request.DestinationAuthentication.Validate();
         await RunWorkerAsync(
-                "remote_transfer",
+                request.Docker is null ? "remote_transfer" : "docker_transfer",
                 requestId => BuildRemoteTransferMessage(requestId, request),
                 requireLocalTransferDirections: false,
                 cancellationToken)
@@ -107,6 +107,24 @@ public sealed class RsyncWorkerTransferService
                 })
             .ConfigureAwait(false);
         return results;
+    }
+
+    public async Task<IReadOnlyList<DockerImage>> ListDockerImagesAsync(
+        ConnectionProfile profile, IReadOnlyList<ConnectionProfile> route,
+        SshAuthenticationOptions authentication, CancellationToken cancellationToken = default)
+    {
+        authentication.Validate();
+        var images = new List<DockerImage>();
+        await RunWorkerAsync("docker_list", requestId => new
+        {
+            type = "docker_list", requestId,
+            dockerList = BuildRemote(route.Count == 0 ? [profile] : route, 0, authentication),
+        }, false, cancellationToken, message =>
+        {
+            if (message.Type == "docker_images" && message.Images is not null)
+                images.AddRange(message.Images);
+        }).ConfigureAwait(false);
+        return images;
     }
 
     private async Task RunWorkerAsync(
@@ -390,6 +408,7 @@ public sealed class RsyncWorkerTransferService
             requestId,
             routeProbe = new
             {
+                request.Docker,
                 firstHop = BuildRemote(firstHopRoute, 0, request.FirstHopAuthentication),
                 target = BuildRemote(targetRoute, 0, request.TargetAuthentication),
                 candidates = request.Candidates.Select(candidate => new
@@ -416,10 +435,11 @@ public sealed class RsyncWorkerTransferService
             : request.DestinationRoute;
         return new
         {
-            type = "remote_transfer",
+            type = request.Docker is null ? "remote_transfer" : "docker_transfer",
             requestId,
             remoteTransfer = new
             {
+                request.Docker,
                 sourcePath = request.SourcePath,
                 destinationPath = request.DestinationPath,
                 copyContents = request.CopyContents,
@@ -587,6 +607,7 @@ public sealed class RsyncWorkerTransferService
         public WorkerError? Error { get; init; }
         public WorkerCapabilities? Capabilities { get; init; }
         public WorkerRouteProbeResult? Probe { get; init; }
+        public DockerImage[]? Images { get; init; }
     }
 
     private sealed record WorkerError
