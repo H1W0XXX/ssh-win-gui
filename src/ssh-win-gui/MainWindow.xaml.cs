@@ -146,7 +146,7 @@ public partial class MainWindow : Window
 
     private async void SessionTree_OnPreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
-        if (e.ChangedButton != MouseButton.Left)
+        if (e.ChangedButton != MouseButton.Left || IsSessionTreeScrollBarSource(e.OriginalSource))
         {
             return;
         }
@@ -171,6 +171,26 @@ public partial class MainWindow : Window
             ClearSessionTreeSelection();
             SessionTree.Focus();
         }
+    }
+
+    private bool IsSessionTreeScrollBarSource(object originalSource)
+    {
+        // Row selection uses Y coordinates across the tree width. Let the
+        // scrollbar (including its thumb and track buttons) handle its own input.
+        var current = originalSource as DependencyObject;
+        while (current is not null && current != SessionTree)
+        {
+            if (current is ScrollBar)
+            {
+                return true;
+            }
+
+            current = current is Visual
+                ? VisualTreeHelper.GetParent(current)
+                : LogicalTreeHelper.GetParent(current);
+        }
+
+        return false;
     }
 
     private TreeViewItem? FindSessionTreeItemAt(Point point)
@@ -218,7 +238,7 @@ public partial class MainWindow : Window
 
     private void SessionTree_OnPreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
     {
-        if (e.ChangedButton != MouseButton.Right)
+        if (e.ChangedButton != MouseButton.Right || IsSessionTreeScrollBarSource(e.OriginalSource))
         {
             return;
         }
