@@ -110,6 +110,11 @@
                 <Setter Property="Background" Value="{StaticResource DangerSoftBrush}" />
             </Style>
 
+            <!-- Tooltips must use a text font even when their owner uses an icon font. -->
+            <Style TargetType="ToolTip" BasedOn="{StaticResource {x:Type ToolTip}}">
+                <Setter Property="FontFamily" Value="Segoe UI Variable Text, Segoe UI, Microsoft YaHei UI" />
+            </Style>
+
             <Style x:Key="CompactIconButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
                 <Setter Property="Width" Value="32" />
                 <Setter Property="Height" Value="32" />
