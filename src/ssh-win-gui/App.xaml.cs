@@ -35,6 +35,7 @@ public partial class App : System.Windows.Application
 
         base.OnStartup(e);
         LocalizationService.Initialize();
+        Controls.ComboBoxDropDownPlacement.RegisterForAllComboBoxes();
         var window = new MainWindow();
         MainWindow = window;
         window.Show();
