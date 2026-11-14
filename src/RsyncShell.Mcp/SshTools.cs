@@ -1,10 +1,10 @@
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Text;
+using System.Text.RegularExpressions;
 using ModelContextProtocol.Server;
 using RsyncShell.Core.Models;
 using RsyncShell.Core.Services;
-using Tmds.Ssh;
 
 namespace RsyncShell.Mcp;
 
@@ -13,6 +13,9 @@ public sealed class SshTools
 {
     private const int DefaultOutputBytes = 16 * 1024;
     private const int MaximumOutputBytes = 64 * 1024;
+    private const int DefaultMultiOutputBytes = 4 * 1024;
+    private const int MaximumMultiOutputBytes = 16 * 1024;
+    private const int MaximumMultiSessions = 32;
     private const int DefaultTransferTimeoutSeconds = 600;
 
     [McpServerTool(
@@ -22,7 +25,7 @@ public sealed class SshTools
          OpenWorld = false,
          UseStructuredContent = true,
          OutputSchemaType = typeof(SessionSummary[])),
-     Description("Lists SSH sessions configured in ssh-win-gui. Use these session IDs or exact names with run_script, rsync_upload, or rsync_download. Private-key paths and credentials are never returned.")]
+     Description("Lists SSH sessions configured in ssh-win-gui. Use these session IDs or exact names with the other tools. Private-key paths and credentials are never returned.")]
     public static async Task<IReadOnlyList<SessionSummary>> ListSessionsAsync(
         CancellationToken cancellationToken = default)
     {
@@ -45,77 +48,127 @@ public sealed class SshTools
          OpenWorld = true,
          UseStructuredContent = true,
          OutputSchemaType = typeof(RemoteScriptResult)),
-     Description("Runs a POSIX shell script on a configured ssh-win-gui session. Prefer this tool over invoking ssh through PowerShell: the script is sent directly to remote `sh -s` over SSH stdin, so local PowerShell quoting and escaping cannot alter it. The saved private key and jump/SOCKS route are reused. Unknown or changed host keys are rejected.")]
+     Description("Runs a POSIX shell script on a configured ssh-win-gui session. Prefer this tool over invoking ssh through PowerShell: the script is sent directly to remote `sh -s` over SSH stdin, so local PowerShell quoting and escaping cannot alter it. The session's SSH connection is kept open and reused by later calls. Choose which part of long output to keep with outputMode and grep instead of piping through tail or grep, which would hide the script's exit code. Unknown or changed host keys are rejected. For commands that outlive the timeout use start_job.")]
     public static async Task<RemoteScriptResult> RunScriptAsync(
         [Description("Session ID from list_sessions, or an exact configured session name.")] string session,
         [Description("POSIX shell script sent verbatim as UTF-8 to remote `sh -s`. Include `set -e` when fail-fast behavior is wanted.")] string script,
         [Description("Execution timeout in seconds, from 1 to 600. Defaults to 60.")] int timeoutSeconds = 60,
-        [Description("Maximum bytes retained separately for stdout and stderr, from 1024 to 65536. Defaults to 16384; excess output is drained but marked truncated.")] int maxOutputBytes = DefaultOutputBytes,
+        [Description("Maximum bytes retained separately for stdout and stderr, from 1024 to 65536. Defaults to 16384; excess output is drained and replaced by an '[... N bytes omitted ...]' marker.")] int maxOutputBytes = DefaultOutputBytes,
+        [Description("Which part of over-long output to keep: 'head_tail' (default, first and last halves), 'tail' (the end, best for builds and tests), or 'head' (the start).")] string outputMode = "head_tail",
+        [Description("Optional .NET regular expression. When set, only stdout/stderr lines that match are kept, before the byte limit applies. Use (?i) for case-insensitive matching.")] string? grep = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(session);
-        ArgumentException.ThrowIfNullOrWhiteSpace(script);
-        if (timeoutSeconds is < 1 or > 600)
-            throw new ArgumentOutOfRangeException(nameof(timeoutSeconds), "Timeout must be between 1 and 600 seconds.");
-        if (maxOutputBytes is < 1024 or > MaximumOutputBytes)
-            throw new ArgumentOutOfRangeException(nameof(maxOutputBytes), "Output limit must be between 1024 and 65536 bytes.");
+        var options = ScriptOptions.Create(script, timeoutSeconds, maxOutputBytes, MaximumOutputBytes, outputMode, grep);
+        var context = await SessionContext.OpenAsync(session, cancellationToken).ConfigureAwait(false);
+        return await RunScriptAsync(context, options, cancellationToken).ConfigureAwait(false);
+    }
 
+    [McpServerTool(
+         Name = "run_script_multi",
+         Destructive = true,
+         OpenWorld = true,
+         UseStructuredContent = true,
+         OutputSchemaType = typeof(MultiScriptResult)),
+     Description("Runs the same POSIX shell script on several ssh-win-gui sessions in parallel, one reused SSH connection per session. Sessions whose exit code and output are identical are merged into one group, so a fleet that agrees costs the output of a single host. A host that cannot be reached is reported in its own group instead of failing the call. Arguments behave as in run_script.")]
+    public static async Task<MultiScriptResult> RunScriptMultiAsync(
+        [Description("1 to 32 session IDs or exact session names from list_sessions.")] string[] sessions,
+        [Description("POSIX shell script sent verbatim as UTF-8 to remote `sh -s` on every session.")] string script,
+        [Description("Per-session execution timeout in seconds, from 1 to 600. Defaults to 60.")] int timeoutSeconds = 60,
+        [Description("Maximum bytes retained per session, separately for stdout and stderr, from 1024 to 16384. Defaults to 4096.")] int maxOutputBytes = DefaultMultiOutputBytes,
+        [Description("Which part of over-long output to keep: 'head_tail' (default), 'tail', or 'head'.")] string outputMode = "head_tail",
+        [Description("Optional .NET regular expression; only matching stdout/stderr lines are kept.")] string? grep = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(sessions);
+        if (sessions.Length is < 1 or > MaximumMultiSessions)
+            throw new ArgumentException($"Provide between 1 and {MaximumMultiSessions} sessions.", nameof(sessions));
+        var options = ScriptOptions.Create(script, timeoutSeconds, maxOutputBytes, MaximumMultiOutputBytes, outputMode, grep);
+
+        // Resolve every name before touching any host, so a typo runs nothing.
         var profiles = await new SessionRepository().LoadAsync(cancellationToken).ConfigureAwait(false);
-        var profile = ResolveProfile(profiles, session);
-        if (string.IsNullOrWhiteSpace(profile.PrivateKeyPath))
-            throw new InvalidOperationException(
-                $"Session '{profile.Name}' has no saved private key. Password authentication is intentionally unavailable to the MCP server.");
+        var targets = sessions
+            .Select(selector => ResolveProfile(profiles, selector ?? string.Empty))
+            .DistinctBy(profile => profile.Id, StringComparer.Ordinal)
+            .ToArray();
+        return await RunScriptMultiAsync(
+            targets,
+            profile => SessionContext.Create(profiles, profile),
+            options,
+            cancellationToken).ConfigureAwait(false);
+    }
 
-        var privateKeyPath = Environment.ExpandEnvironmentVariables(profile.PrivateKeyPath);
-        if (!File.Exists(privateKeyPath))
-            throw new FileNotFoundException($"The saved private key for session '{profile.Name}' does not exist.");
-
-        var authentication = new SshAuthenticationOptions
-        {
-            Kind = SshAuthenticationKind.PrivateKey,
-            PrivateKeyPath = privateKeyPath,
-        };
-        var route = SshRouteResolver.Resolve(profile, profiles);
-        var verifier = new StrictHostKeyVerifier(new KnownHostStore());
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(timeoutSeconds));
-        using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeout.Token);
+    internal static async Task<RemoteScriptResult> RunScriptAsync(
+        SessionContext context,
+        ScriptOptions options,
+        CancellationToken cancellationToken)
+    {
+        var stdout = new OutputCapture(options.MaxOutputBytes, options.Mode);
+        var stderr = new OutputCapture(options.MaxOutputBytes, options.Mode);
+        var stdoutFilter = options.Grep is null ? null : new LineFilterSink(options.Grep, stdout);
+        var stderrFilter = options.Grep is null ? null : new LineFilterSink(options.Grep, stderr);
         var stopwatch = Stopwatch.StartNew();
+        var exitCode = await context.RunScriptAsync(
+            "SSH script",
+            options.Script,
+            (IOutputSink?)stdoutFilter ?? stdout,
+            (IOutputSink?)stderrFilter ?? stderr,
+            options.TimeoutSeconds,
+            cancellationToken).ConfigureAwait(false);
+        stdoutFilter?.Complete();
+        stderrFilter?.Complete();
+        stopwatch.Stop();
+        return new RemoteScriptResult(
+            context.Profile.Id,
+            context.Profile.Name,
+            exitCode,
+            stdout.GetText(),
+            stderr.GetText(),
+            stdout.Truncated,
+            stderr.Truncated,
+            stopwatch.ElapsedMilliseconds);
+    }
 
-        try
+    internal static async Task<MultiScriptResult> RunScriptMultiAsync(
+        IReadOnlyList<ConnectionProfile> targets,
+        Func<ConnectionProfile, SessionContext> createContext,
+        ScriptOptions options,
+        CancellationToken cancellationToken)
+    {
+        var stopwatch = Stopwatch.StartNew();
+        var outcomes = await Task.WhenAll(targets.Select(async profile =>
         {
-            var output = profile.ProxyKind == SshProxyKind.JumpHost
-                ? await RunThroughNativeClientAsync(
-                    profile, authentication, route, verifier.Verify, script, maxOutputBytes, linked.Token).ConfigureAwait(false)
-                : await RunThroughSshNetAsync(
-                    profile, authentication, route, verifier.Verify, script, maxOutputBytes, linked.Token).ConfigureAwait(false);
-            stopwatch.Stop();
-            return new RemoteScriptResult(
-                profile.Id,
-                profile.Name,
-                output.ExitCode,
-                output.StandardOutput,
-                output.StandardError,
-                output.StandardOutputTruncated,
-                output.StandardErrorTruncated,
-                stopwatch.ElapsedMilliseconds);
-        }
-        catch (OperationCanceledException) when (timeout.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
-        {
-            throw new TimeoutException($"SSH script timed out after {timeoutSeconds} seconds on session '{profile.Name}'.");
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
-        catch (Exception ex) when (verifier.Failure is not null)
-        {
-            throw new InvalidOperationException(verifier.Failure, ex);
-        }
-        catch (Exception ex)
-        {
-            throw new InvalidOperationException(
-                $"SSH script failed on session '{profile.Name}': {SanitizeError(ex.Message, profiles)}");
-        }
+            try
+            {
+                var result = await RunScriptAsync(createContext(profile), options, cancellationToken)
+                    .ConfigureAwait(false);
+                return new MultiScriptGroup(
+                    [profile.Name],
+                    result.ExitCode,
+                    result.StandardOutput,
+                    result.StandardError,
+                    result.StandardOutputTruncated,
+                    result.StandardErrorTruncated,
+                    null);
+            }
+            catch (Exception error) when (!cancellationToken.IsCancellationRequested)
+            {
+                return new MultiScriptGroup([profile.Name], null, string.Empty, string.Empty, false, false, error.Message);
+            }
+        })).ConfigureAwait(false);
+        stopwatch.Stop();
+
+        var groups = outcomes
+            .GroupBy(outcome => (
+                outcome.ExitCode,
+                outcome.StandardOutput,
+                outcome.StandardError,
+                outcome.StandardOutputTruncated,
+                outcome.StandardErrorTruncated,
+                outcome.Error))
+            .Select(group => group.First() with { Sessions = group.SelectMany(outcome => outcome.Sessions).ToArray() })
+            .ToArray();
+        return new MultiScriptResult(groups, targets.Count, stopwatch.ElapsedMilliseconds);
     }
 
     [McpServerTool(
@@ -216,7 +269,7 @@ public sealed class SshTools
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeout.Token);
         var stopwatch = Stopwatch.StartNew();
         long transferredBytes = 0;
-        var log = new BoundedOutput(16 * 1024);
+        var log = new OutputCapture(16 * 1024);
 
         try
         {
@@ -447,140 +500,6 @@ public sealed class SshTools
         }
         return sanitized;
     }
-
-    private static async Task<CommandOutput> RunThroughSshNetAsync(
-        ConnectionProfile profile,
-        SshAuthenticationOptions authentication,
-        IReadOnlyList<ConnectionProfile> route,
-        Func<SshHostKeyInfo, bool> verifyHostKey,
-        string script,
-        int outputLimit,
-        CancellationToken cancellationToken)
-    {
-        using var session = await new SshClientFactory().ConnectAsync(
-            profile, authentication, verifyHostKey, route, cancellationToken).ConfigureAwait(false);
-        using var command = session.Client.CreateCommand("sh -s");
-        var execution = command.ExecuteAsync(cancellationToken);
-        var stdout = ReadBoundedAsync(command.OutputStream, outputLimit, cancellationToken);
-        var stderr = ReadBoundedAsync(command.ExtendedOutputStream, outputLimit, cancellationToken);
-        await using (var input = command.CreateInputStream())
-        {
-            await input.WriteAsync(Encoding.UTF8.GetBytes(script), cancellationToken).ConfigureAwait(false);
-        }
-        await execution.ConfigureAwait(false);
-        var stdoutResult = await stdout.ConfigureAwait(false);
-        var stderrResult = await stderr.ConfigureAwait(false);
-        return new CommandOutput(
-            command.ExitStatus ?? -1,
-            stdoutResult.Text,
-            stderrResult.Text,
-            stdoutResult.Truncated,
-            stderrResult.Truncated);
-    }
-
-    private static async Task<CommandOutput> RunThroughNativeClientAsync(
-        ConnectionProfile profile,
-        SshAuthenticationOptions authentication,
-        IReadOnlyList<ConnectionProfile> route,
-        Func<SshHostKeyInfo, bool> verifyHostKey,
-        string script,
-        int outputLimit,
-        CancellationToken cancellationToken)
-    {
-        using var client = JumpSshClientFactory.Create(profile, authentication, route, verifyHostKey);
-        await client.ConnectAsync(cancellationToken).ConfigureAwait(false);
-        using var process = await client.ExecuteAsync("sh -s", cancellationToken).ConfigureAwait(false);
-        await process.WriteAsync(script.AsMemory(), cancellationToken).ConfigureAwait(false);
-        process.WriteEof();
-
-        var stdout = new BoundedOutput(outputLimit);
-        var stderr = new BoundedOutput(outputLimit);
-        var stdoutBuffer = new byte[8 * 1024];
-        var stderrBuffer = new byte[8 * 1024];
-        while (true)
-        {
-            var (isError, read) = await process.ReadAsync(
-                stdoutBuffer, stderrBuffer, cancellationToken).ConfigureAwait(false);
-            if (read == 0)
-                break;
-            if (isError)
-                stderr.Append(stderrBuffer.AsSpan(0, read));
-            else
-                stdout.Append(stdoutBuffer.AsSpan(0, read));
-        }
-
-        return new CommandOutput(
-            await process.GetExitCodeAsync(cancellationToken).ConfigureAwait(false),
-            stdout.GetText(),
-            stderr.GetText(),
-            stdout.Truncated,
-            stderr.Truncated);
-    }
-
-    private static async Task<BoundedText> ReadBoundedAsync(
-        Stream stream,
-        int limit,
-        CancellationToken cancellationToken)
-    {
-        var output = new BoundedOutput(limit);
-        var buffer = new byte[8 * 1024];
-        while (true)
-        {
-            var read = await stream.ReadAsync(buffer, cancellationToken).ConfigureAwait(false);
-            if (read == 0)
-                return new BoundedText(output.GetText(), output.Truncated);
-            output.Append(buffer.AsSpan(0, read));
-        }
-    }
-
-    private sealed class StrictHostKeyVerifier(KnownHostStore store)
-    {
-        public string? Failure { get; private set; }
-
-        public bool Verify(SshHostKeyInfo key)
-        {
-            var status = store.Check(key, out _);
-            if (status == KnownHostStatus.Trusted)
-                return true;
-
-            Failure = status switch
-            {
-                KnownHostStatus.Changed =>
-                    $"Refused SSH session because the host key changed for {key.Host}:{key.Port}. Open ssh-win-gui and verify the new fingerprint manually.",
-                KnownHostStatus.AdditionalAlgorithm =>
-                    $"Refused an unapproved SSH host-key algorithm for {key.Host}:{key.Port}. Open ssh-win-gui and approve it manually.",
-                _ =>
-                    $"Refused unknown SSH host key for {key.Host}:{key.Port}. Connect once in ssh-win-gui and approve the fingerprint manually.",
-            };
-            return false;
-        }
-    }
-
-    private sealed class BoundedOutput(int limit)
-    {
-        private readonly MemoryStream _stream = new(Math.Min(limit, 16 * 1024));
-        public bool Truncated { get; private set; }
-
-        public void Append(ReadOnlySpan<byte> bytes)
-        {
-            var remaining = limit - checked((int)_stream.Length);
-            if (remaining > 0)
-                _stream.Write(bytes[..Math.Min(remaining, bytes.Length)]);
-            if (bytes.Length > remaining)
-                Truncated = true;
-        }
-
-        public string GetText() => Encoding.UTF8.GetString(_stream.GetBuffer(), 0, checked((int)_stream.Length));
-    }
-
-    private sealed record CommandOutput(
-        int ExitCode,
-        string StandardOutput,
-        string StandardError,
-        bool StandardOutputTruncated,
-        bool StandardErrorTruncated);
-
-    private sealed record BoundedText(string Text, bool Truncated);
 }
 
 public sealed record SessionSummary(
@@ -614,3 +533,65 @@ public sealed record RsyncPathTransferResult(
     string Log,
     bool LogTruncated,
     long DurationMilliseconds);
+
+public sealed record MultiScriptResult(
+    IReadOnlyList<MultiScriptGroup> Groups,
+    int SessionCount,
+    long DurationMilliseconds);
+
+public sealed record MultiScriptGroup(
+    IReadOnlyList<string> Sessions,
+    int? ExitCode,
+    string StandardOutput,
+    string StandardError,
+    bool StandardOutputTruncated,
+    bool StandardErrorTruncated,
+    string? Error);
+
+internal sealed record ScriptOptions(
+    string Script,
+    int TimeoutSeconds,
+    int MaxOutputBytes,
+    OutputMode Mode,
+    Regex? Grep)
+{
+    public static ScriptOptions Create(
+        string script,
+        int timeoutSeconds,
+        int maxOutputBytes,
+        int maximumOutputBytes,
+        string outputMode,
+        string? grep)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(script);
+        if (timeoutSeconds is < 1 or > 600)
+            throw new ArgumentOutOfRangeException(nameof(timeoutSeconds), "Timeout must be between 1 and 600 seconds.");
+        if (maxOutputBytes < 1024 || maxOutputBytes > maximumOutputBytes)
+            throw new ArgumentOutOfRangeException(
+                nameof(maxOutputBytes), $"Output limit must be between 1024 and {maximumOutputBytes} bytes.");
+        return new ScriptOptions(script, timeoutSeconds, maxOutputBytes, ParseMode(outputMode), ParseGrep(grep));
+    }
+
+    public static OutputMode ParseMode(string? outputMode) =>
+        (outputMode ?? string.Empty).Trim().ToLowerInvariant() switch
+        {
+            "" or "head_tail" or "headtail" or "both" => OutputMode.HeadTail,
+            "head" => OutputMode.Head,
+            "tail" => OutputMode.Tail,
+            _ => throw new ArgumentException("outputMode must be 'head', 'tail', or 'head_tail'.", nameof(outputMode)),
+        };
+
+    public static Regex? ParseGrep(string? grep)
+    {
+        if (string.IsNullOrEmpty(grep))
+            return null;
+        try
+        {
+            return LineFilterSink.CreatePattern(grep);
+        }
+        catch (ArgumentException error)
+        {
+            throw new ArgumentException($"grep is not a valid regular expression: {error.Message}", nameof(grep));
+        }
+    }
+}

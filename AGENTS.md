@@ -14,9 +14,16 @@ When a task needs a host already configured in ssh-win-gui, prefer the global
    `rsync_download` instead of embedding file bytes in a script. Both tools take
    exact source and destination paths, support renaming, and default to refusing
    overwrite or directory merge unless `overwrite=true` is explicit.
+   To read or change a remote text file, use `read_file` and `edit_file`
+   (`write_file` for a new file) instead of `cat`, `sed -i`, or a heredoc.
+   For the same script on several hosts, use `run_script_multi`. For anything
+   that may run longer than 600 seconds, use `start_job`, then poll
+   `job_status` with the returned `nextOffset` and cancel with `stop_job`.
 3. Keep output narrow. Inspect a bounded range, tail, summary, or filtered data
-   instead of printing large logs or files. Increase `maxOutputBytes` only when
-   the task needs it.
+   instead of printing large logs or files. Select output with `outputMode`
+   (`tail` for builds and tests) and `grep` rather than a remote pipe, which
+   would hide the script's exit code. Increase `maxOutputBytes` only when the
+   task needs it.
 4. Treat remote changes as external mutations. Inspect first and stay within the
    user's stated authorization; using MCP does not broaden permission to restart,
    delete, install, or reconfigure remote systems.

@@ -102,6 +102,14 @@ not create timestamped package directories. The package includes SHA-256
 checksums and only English/Simplified-Chinese UI resources. It also publishes
 the self-contained STDIO MCP server at `tools\mcp\ssh-win-gui-mcp.exe`.
 
+Before publishing, close the GUI and disconnect any MCP clients running from
+the publish directory. Windows can prevent replacing the directory while these
+processes are running. The publisher checks for them before building and reports
+their PIDs; it never stops them automatically. If replacement fails after the
+build, it preserves the built files in the staging directory printed in the
+warning. Copy out any files you need before the next publish, which cleans old
+staging directories.
+
 GitHub Actions runs the same publisher for every push and pull request, and it
 can also be started manually from the Actions tab. Download the
 `ssh-win-gui-win-x64` workflow artifact when a local .NET/Go toolchain is not
@@ -113,13 +121,18 @@ To make saved sessions available to Codex globally, register that executable:
 codex mcp add ssh_win_gui -- D:\ssh-win-gui-win-x64\tools\mcp\ssh-win-gui-mcp.exe
 ```
 
-The MCP server exposes `list_sessions`, `run_script`, `rsync_upload`, and
-`rsync_download`. The rsync tools transfer files or recursive directories to
-exact user-selected destination paths and can rename them during transfer.
-`run_script` sends the
+The MCP server exposes `list_sessions`, `run_script`, `run_script_multi`,
+`read_file`, `edit_file`, `write_file`, `start_job`, `job_status`, `stop_job`,
+`rsync_upload`, and `rsync_download`. The rsync tools transfer files or
+recursive directories to exact user-selected destination paths and can rename
+them during transfer. `run_script` sends the
 UTF-8 script directly to remote `sh -s` over SSH stdin, avoiding a local
-PowerShell/`ssh.exe` quoting layer. It reuses saved private-key, SOCKS5 and jump
-routes and strictly requires a fingerprint already approved by the GUI. It
+PowerShell/`ssh.exe` quoting layer. The file tools read and edit remote text
+files by line range and exact string, the job tools run detached commands that
+outlive a call, and `run_script_multi` fans one script out to several sessions.
+These tools share one pooled SSH connection per session. The server reuses
+saved private-key, SOCKS5 and jump routes and strictly requires a fingerprint
+already approved by the GUI. It
 never returns private-key paths and intentionally does not support password or
 private-key-passphrase prompts. File transfers use the bundled Go rsync worker,
 with compression enabled and fingerprints logged according to the desktop

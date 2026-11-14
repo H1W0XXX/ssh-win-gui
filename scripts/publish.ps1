@@ -79,6 +79,19 @@ function Invoke-Checked {
     }
 }
 
+function Assert-PackageNotRunning {
+    param([Parameter(Mandatory)] [string]$PackageDirectory)
+
+    $prefix = [System.IO.Path]::GetFullPath($PackageDirectory).TrimEnd('\') + '\'
+    $running = @(Get-CimInstance Win32_Process -ErrorAction Stop | Where-Object {
+        $_.ExecutablePath -and $_.ExecutablePath.StartsWith($prefix, [System.StringComparison]::OrdinalIgnoreCase)
+    })
+    if ($running.Count -gt 0) {
+        $details = ($running | ForEach-Object { "$($_.Name) (PID $($_.ProcessId))" }) -join ', '
+        throw "Publish directory is in use: $PackageDirectory. Running: $details. Close the GUI and disconnect MCP clients using this package before publishing. No processes were stopped."
+    }
+}
+
 function Remove-UnwantedSatelliteResources {
     param([Parameter(Mandatory)] [string]$PackageDirectory)
 
@@ -116,6 +129,8 @@ Assert-DirectChildPath -Root $publishRoot -Path $stagingDirectory -AllowedNamePa
 Assert-DirectChildPath -Root $publishRoot -Path $previousDirectory -AllowedNamePattern '^\.ssh-win-gui-win-x64\.previous-\d+$'
 Assert-DirectChildPath -Root $publishRoot -Path $stagingZip -AllowedNamePattern '^\.ssh-win-gui-win-x64\.staging-\d+\.zip$'
 
+Assert-PackageNotRunning -PackageDirectory $finalDirectory
+
 # A previous publish can leave its verified staging/backup path behind when a
 # running helper executable temporarily locks it. Sweep only direct children
 # with the exact generated names so a later publish does not accumulate them.
@@ -139,6 +154,7 @@ New-Item -ItemType Directory -Path $stagingDirectory | Out-Null
 $previousGoMaxProcs = [Environment]::GetEnvironmentVariable("GOMAXPROCS", "Process")
 [Environment]::SetEnvironmentVariable("GOMAXPROCS", "8", "Process")
 $swapped = $false
+$preserveStaging = $false
 try {
     $workerSource = Join-Path $repoRoot "src\RsyncShell.RsyncWorker"
     $vendorRsyncSource = Join-Path $repoRoot "third_party\rsync"
@@ -214,14 +230,24 @@ try {
         }
     [System.IO.File]::WriteAllLines($checksumPath, $checksums, [System.Text.UTF8Encoding]::new($false))
 
-    if (Test-Path -LiteralPath $finalDirectory) {
-        Move-Item -LiteralPath $finalDirectory -Destination $previousDirectory
+    try {
+        Assert-PackageNotRunning -PackageDirectory $finalDirectory
+        if (Test-Path -LiteralPath $finalDirectory) {
+            Move-Item -LiteralPath $finalDirectory -Destination $previousDirectory
+        }
+    }
+    catch {
+        $preserveStaging = $true
+        Write-Warning "Package replacement failed. Built files are preserved at: $stagingDirectory. Close programs using the publish directory (including GUI/MCP clients); other open handles can also prevent replacement."
+        throw
     }
     try {
         Move-Item -LiteralPath $stagingDirectory -Destination $finalDirectory
         $swapped = $true
     }
     catch {
+        $preserveStaging = $true
+        Write-Warning "Package replacement failed. Built files are preserved at: $stagingDirectory"
         if (Test-Path -LiteralPath $previousDirectory) {
             Move-Item -LiteralPath $previousDirectory -Destination $finalDirectory
         }
@@ -256,7 +282,7 @@ try {
 }
 finally {
     [Environment]::SetEnvironmentVariable("GOMAXPROCS", $previousGoMaxProcs, "Process")
-    if (-not $swapped) {
+    if (-not $swapped -and -not $preserveStaging) {
         Remove-VerifiedItem -Root $publishRoot -Path $stagingDirectory -AllowedNamePattern '^\.ssh-win-gui-win-x64\.staging-\d+$'
     }
     Remove-VerifiedItem -Root $publishRoot -Path $stagingZip -AllowedNamePattern '^\.ssh-win-gui-win-x64\.staging-\d+\.zip$'
